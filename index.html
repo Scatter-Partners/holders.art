@@ -84,6 +84,16 @@
   
   <div id="title">Snapshot Multiple Collections</div>
   <div id="text-container">
+	  <label id="input-label" for="chain-select">Select Chain:</label>
+	  <select id="chain-select">
+		<option value="eth-mainnet">Ethereum Mainnet</option>
+		<option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
+		<option value="polygon-mainnet">Polygon Mainnet</option>
+		<option value="polygon-mumbai">Polygon Mumbai (Testnet)</option>
+		<option value="opt-mainnet">Optimism Mainnet</option>
+		<option value="opt-goerli">Optimism Goerli (Testnet)</option>
+		<option value="arb-mainnet">Arbitrum Mainnet</option>
+		</select>  
     <label id="input-label" for="collection-addresses-input">Collection Addresses (one per line):</label>
     <textarea id="collection-addresses-input" rows="20" cols="40"></textarea>
     <label id="input-label" for="block-number-input">Block Number (optional):</label>
@@ -133,11 +143,15 @@
       snapshotButton.innerText = 'Get Multi-Snapshot';
     };
 
+
+
 	async function snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance) {
 	  let mergedLines = [];
+	  
+	  const chain = document.getElementById('chain-select').value;
 
 	  for (let address of collectionAddresses) {
-		const fetchURL = `https://eth-mainnet.g.alchemy.com/nft/v2/${apiKey}/getOwnersForCollection?contractAddress=${address}&blockNumber=${blockNumber}&withTokenBalances=${includeBalance}`;
+		const fetchURL = `https://${chain}.g.alchemy.com/nft/v2/${apiKey}/getOwnersForCollection?contractAddress=${address}&blockNumber=${blockNumber}&withTokenBalances=${includeBalance}`;
 
 		logBox.value += 'Fetching owners for ' + address + '...\n';
 
