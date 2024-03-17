@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Holder Fetcher</title>
+</head>
+<body>
+    <h1>Token Holder Fetcher</h1>
+	<p>This works, but for popular coins it will download all of the transfer history which can take a while. Press F12 and watch console for errors / network tab for the chunk downloading. <a href="etherscanpro.html">Etherscan Pro Version</a></p>
+    <label for="contractAddress">Contract Address:</label>
+    <input type="text" id="contractAddress"><br>
+    <label for="blockNumber">Block Number (leave empty for latest):</label>
+    <input type="text" id="blockNumber"><br>
+    <button onclick="generateCSV()">Generate CSV</button>
+    <script>
+        const etherscanApiKey = "A6U4C4REMFV7W3Z1XY7ABQI8W19Y7NZMSD"; // this is a free API key with a low rate limit, if it doesn't work generate your own free API key
+
+        const fetchTransactionsRecursively = async (contractAddress, startBlock, endBlock) => {
+            const baseURL = "https://api.etherscan.io/api";
+            const maxResponse = 10000;
+
+            const fetchTransactions = async (startBlock, endBlock) => {
+                const params = new URLSearchParams({
+                    module: "account",
+                    action: "tokentx",
+                    contractaddress: contractAddress,
+                    startblock: startBlock.toString(),
+                    endblock: endBlock.toString(),
+                    sort: "asc",
+                    apikey: etherscanApiKey,
+                });
+
+                const response = await handleRateLimit(() =>
+                    fetch(`${baseURL}?${params}`)
+                );
+                const data = await response.json();
+
+                if (data.result.length === maxResponse) {
+                    const midBlock = Math.floor((startBlock + endBlock) / 2);
+                    console.log("recursing", startBlock, midBlock, endBlock);
+
+                    const firstHalf = await fetchTransactions(startBlock, midBlock);
+                    const secondHalf = await fetchTransactions(midBlock + 1, endBlock);
+                    return firstHalf.concat(secondHalf);
+                } else {
+                    return data.result;
+                }
+            };
+
+            return fetchTransactions(startBlock, endBlock);
+        };
+
+        const RETRY_LIMIT = 5;
+        const INITIAL_RETRY_DELAY = 2000;
+
+        async function handleRateLimit(apiCall) {
+            let retryCount = 0;
+            let retryDelay = INITIAL_RETRY_DELAY;
+
+            while (retryCount < RETRY_LIMIT) {
+                try {
+                    const result = await apiCall();
+                    return result;
+                } catch (error) {
+                    console.log(`Sleeping for ${retryDelay / 1000} seconds...\n`);
+                    await sleep(retryDelay);
+
+                    retryCount++;
+                    retryDelay *= 2;
+                }
+            }
+
+            throw new Error("Maximum retries reached due to rate limiting.");
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        const generateCSV = async () => {
+            const contractAddress = document.getElementById("contractAddress").value;
+            const blockNumberInput = document.getElementById("blockNumber").value;
+            const endBlock = blockNumberInput ? parseInt(blockNumberInput) : 999999999;
+            const startBlock = 0;
+            const outputFile = `snapshot_${contractAddress}_${endBlock}.csv`;
+
+            const transactions = await fetchTransactionsRecursively(
+                contractAddress,
+                startBlock,
+                endBlock
+            );
+
+            let balances = {};
+
+            console.log(transactions);
+            transactions.forEach((tx) => {
+                if (tx.value) {
+                    const value = BigInt(tx.value);
+                    balances[tx.from] = balances[tx.from]
+                        ? balances[tx.from] - value
+                        : -value;
+                    balances[tx.to] = balances[tx.to] ? balances[tx.to] + value : value;
+                }
+            });
+
+            const sortedBalancesArray = Object.entries(balances).sort((a, b) =>
+                Number(b[1] - a[1])
+            );
+
+            let csvContent = "Address,Balance\n";
+            sortedBalancesArray.forEach(([address, balance]) => {
+                csvContent += `${address},${balance.toString()}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", outputFile);
+                link.style.visibility = "hidden";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        };
+    </script>
+</body>
+</html>

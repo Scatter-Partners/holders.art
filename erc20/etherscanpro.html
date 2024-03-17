@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Holder Fetcher</title>
+</head>
+<body>
+    <h1>Token Holder Fetcher</h1>
+	<p>This requires an Etherscan Pro API key! Also it probably does not support block number (untested, their docs imply block number is not supported), only latest block! Download this page and edit API key if you want to use this with a Pro key (costs $200 a month).</p>
+    <label for="contractAddress">Contract Address:</label>
+    <input type="text" id="contractAddress" value="0x2890dF158D76E584877a1D17A85FEA3aeeB85aa6"><br>
+    <label for="blockNumber">Block Number:</label>
+    <input type="text" id="blockNumber" value="999999999"><br>
+    <label for="apiKey">API Key:</label>
+    <input type="text" id="apiKey"><br>	
+    <button onclick="generateCSV()">Generate CSV</button>
+    <script>
+        let etherscanApiKey;
+
+        const fetchTokenHolders = async (contractAddress, blockNumber) => {
+            const baseURL = "https://api.etherscan.io/api";
+            const params = new URLSearchParams({
+                module: "token",
+                action: "tokenholderlist",
+                contractaddress: contractAddress,
+                blockno: blockNumber,
+                apikey: etherscanApiKey,
+            });
+
+            const response = await fetch(`${baseURL}?${params}`);
+            const data = await response.json();
+            return data.result;
+        };
+
+        const generateCSV = async () => {
+            const contractAddress = document.getElementById("contractAddress").value;
+            const blockNumber = document.getElementById("blockNumber").value;
+            const outputFile = `snapshot_${contractAddress}_${blockNumber}.csv`;
+			
+			const apiKeyInput = document.getElementById("apiKey").value;
+
+			if (apiKeyInput) {
+				etherscanApiKey = apiKeyInput;
+			} else {
+				alert("API Key field is required!");
+				return;
+			}			
+
+            const tokenHolders = await fetchTokenHolders(contractAddress, blockNumber);
+            console.log(tokenHolders);
+
+            let csvContent = "Address,Balance\n";
+            tokenHolders.forEach((holder) => {
+                csvContent += `${holder.TokenHolderAddress},${holder.TokenHolderQuantity}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", outputFile);
+                link.style.visibility = "hidden";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        };
+    </script>
+</body>
+</html>
