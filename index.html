@@ -3,7 +3,6 @@
 <head>
   <title>Holders.art - Snapshot Multiple Collections</title>
   
-  
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
   <meta name="title" content="Holders.art Snapshot Multiple NFT Collection Holders at Once!" />
@@ -59,7 +58,8 @@
       border: 1px solid #bbb;
       border-radius: 5px;
     }
-    #include-balance-checkbox {
+    #include-balance-checkbox,
+    #slowmode-checkbox {
       margin-top: 10px;
     }
     #snapshot-button {
@@ -97,35 +97,37 @@
 </head>
 <body>
   <div id="sticky-link" >
-	  <a href="https://webtools.scatter.art/">Scatter Partners Webtools</a><br>
-	  <a href="https://www.scatter.art/">Scatter</a>
+    <a href="https://webtools.scatter.art/">Scatter Partners Webtools</a><br>
+    <a href="https://www.scatter.art/">Scatter</a>
   </div>
   
   <br><br>
   <div id="title">Snapshot Multiple Collections</div>
   <div id="description">Supported networks: Ethereum, Sepolia, Polygon, Optimism, Arbitrum, Base, Astar, Starknet</div>
   <div id="text-container">
-	  <label id="input-label" for="chain-select">Select Chain:</label>
-	  <select id="chain-select">
-		<option value="eth-mainnet">Ethereum Mainnet</option>
-		<option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
-		<option value="eth-goerli">Ethereum Goerli (Testnet)</option>
-		<option value="polygon-mainnet">Polygon Mainnet</option>
-		<option value="polygon-mumbai">Polygon Mumbai (Testnet)</option>
-		<option value="opt-mainnet">Optimism Mainnet</option>
-		<option value="opt-sepolia">Optimism Sepolia (Testnet)</option>
-		<option value="opt-goerli">Optimism Goerli (Testnet)</option>
-		<option value="arb-mainnet">Arbitrum Mainnet</option>
-		<option value="base-mainnet">Base Mainnet</option>
-		<option value="astar-mainnet">Astar Mainnet</option>
-		<option value="starknet-mainnet">Starknet Mainnet</option>
-		</select>  
+    <label id="input-label" for="chain-select">Select Chain:</label>
+    <select id="chain-select">
+      <option value="eth-mainnet">Ethereum Mainnet</option>
+      <option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
+      <option value="eth-goerli">Ethereum Goerli (Testnet)</option>
+      <option value="polygon-mainnet">Polygon Mainnet</option>
+      <option value="polygon-mumbai">Polygon Mumbai (Testnet)</option>
+      <option value="opt-mainnet">Optimism Mainnet</option>
+      <option value="opt-sepolia">Optimism Sepolia (Testnet)</option>
+      <option value="opt-goerli">Optimism Goerli (Testnet)</option>
+      <option value="arb-mainnet">Arbitrum Mainnet</option>
+      <option value="base-mainnet">Base Mainnet</option>
+      <option value="astar-mainnet">Astar Mainnet</option>
+      <option value="starknet-mainnet">Starknet Mainnet</option>
+    </select>  
     <label id="input-label" for="collection-addresses-input">Collection Addresses (one per line):</label>
     <textarea id="collection-addresses-input" rows="20" cols="40"></textarea>
     <label id="input-label" for="block-number-input">Block Number (optional):</label>
     <input id="block-number-input" type="text" placeholder="Enter Block Number">
     <label id="input-label" for="include-balance-checkbox">Include token balance:</label>
     <input id="include-balance-checkbox" type="checkbox">
+    <label id="input-label" for="slowmode-checkbox">Slowmode (use if you have long list):</label>
+    <input id="slowmode-checkbox" type="checkbox">
   </div>
   <button id="snapshot-button">Get Multi-Snapshot</button>
   <textarea id="log-box" readonly>
@@ -135,6 +137,7 @@
     let collectionAddressesInput = document.getElementById('collection-addresses-input');
     let blockNumberInput = document.getElementById('block-number-input');
     let includeBalanceCheckbox = document.getElementById('include-balance-checkbox');
+    let slowmodeCheckbox = document.getElementById('slowmode-checkbox');
     let logBox = document.getElementById('log-box');
 
     snapshotButton.onclick = async function() {
@@ -142,6 +145,7 @@
       let collectionAddresses = collectionAddressesInput.value.trim().split('\n');
       let blockNumber = blockNumberInput.value.trim();
       let includeBalance = includeBalanceCheckbox.checked;
+      let slowmode = slowmodeCheckbox.checked;
 
       if (!apiKey) {
         alert('Please enter your Alchemy API key.');
@@ -159,7 +163,7 @@
       logBox.value += 'Snapshotting collections...\n';
 
       try {
-        await snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance);
+        await snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance, slowmode);
         logBox.value += 'Snapshot complete.\n';
       } catch (error) {
         logBox.value += 'Error snapshotting collections: ' + error + '\n';
@@ -169,46 +173,46 @@
       snapshotButton.innerText = 'Get Multi-Snapshot';
     };
 
+    async function snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance, slowmode) {
+      let mergedLines = [];
+      
+      const chain = document.getElementById('chain-select').value;
 
+      for (let address of collectionAddresses) {
+        const fetchURL = `https://${chain}.g.alchemy.com/nft/v2/${apiKey}/getOwnersForCollection?contractAddress=${address}&blockNumber=${blockNumber}&withTokenBalances=${includeBalance}`;
 
-	async function snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance) {
-	  let mergedLines = [];
-	  
-	  const chain = document.getElementById('chain-select').value;
+        logBox.value += 'Fetching owners for ' + address + '...\n';
 
-	  for (let address of collectionAddresses) {
-		const fetchURL = `https://${chain}.g.alchemy.com/nft/v2/${apiKey}/getOwnersForCollection?contractAddress=${address}&blockNumber=${blockNumber}&withTokenBalances=${includeBalance}`;
+        let response = await fetch(fetchURL);
 
-		logBox.value += 'Fetching owners for ' + address + '...\n';
+        if (!response.ok) {
+          throw new Error('Received HTTP ' + response.status + ' from Alchemy API.');
+        }
 
-		let response = await fetch(fetchURL);
+        let data = await response.json();
+        let ownerAddresses;
+        if (includeBalance) {
+          ownerAddresses = data.ownerAddresses.map(owner => {
+            const totalBalance = owner.tokenBalances.reduce((total, token) => total + token.balance, 0);
+            return `${owner.ownerAddress},${totalBalance}`;
+          });
+        } else {
+          ownerAddresses = data.ownerAddresses;
+        }
+        mergedLines.push(...ownerAddresses);
 
-		if (!response.ok) {
-		  throw new Error('Received HTTP ' + response.status + ' from Alchemy API.');
-		}
+        logBox.value += 'Fetched ' + ownerAddresses.length + ' owner(s) for ' + address + '.\n';
 
-		let data = await response.json();
-		let ownerAddresses;
-		if (includeBalance) {
-		  ownerAddresses = data.ownerAddresses.map(owner => {
-			const totalBalance = owner.tokenBalances.reduce((total, token) => total + token.balance, 0);
-			return `${owner.ownerAddress},${totalBalance}`;
-		  });
-		} else {
-		  ownerAddresses = data.ownerAddresses;  // Just assign directly if no balance is requested
-		}
-		mergedLines.push(...ownerAddresses);
+        if (slowmode) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      }
 
-		logBox.value += 'Fetched ' + ownerAddresses.length + ' owner(s) for ' + address + '.\n';
-	  }
+      const uniqueLines = [...new Set(mergedLines)];
+      const blob = new Blob([uniqueLines.join('\n')], { type: 'text/plain' });
 
-	  const uniqueLines = [...new Set(mergedLines)];
-	  const blob = new Blob([uniqueLines.join('\n')], { type: 'text/plain' });
-
-	  saveAs(blob, `output-${Date.now()}.txt`);
-	}
-
-
+      saveAs(blob, `output-${Date.now()}.txt`);
+    }
   </script>
 </body>
 </html>
