@@ -107,18 +107,22 @@
   <div id="text-container">
     <label id="input-label" for="chain-select">Select Chain:</label>
     <select id="chain-select">
-      <option value="eth-mainnet">Ethereum Mainnet</option>
+      <option value="eth-mainnet">Ethereum</option>
       <option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
       <option value="eth-goerli">Ethereum Goerli (Testnet)</option>
-      <option value="polygon-mainnet">Polygon Mainnet</option>
+	  <option value="abstract-mainnet">Abstract</option>
+      <option value="polygon-mainnet">Polygon</option>
       <option value="polygon-mumbai">Polygon Mumbai (Testnet)</option>
-      <option value="opt-mainnet">Optimism Mainnet</option>
+      <option value="opt-mainnet">Optimism</option>
       <option value="opt-sepolia">Optimism Sepolia (Testnet)</option>
       <option value="opt-goerli">Optimism Goerli (Testnet)</option>
-      <option value="arb-mainnet">Arbitrum Mainnet</option>
-      <option value="base-mainnet">Base Mainnet</option>
-      <option value="astar-mainnet">Astar Mainnet</option>
-      <option value="starknet-mainnet">Starknet Mainnet</option>
+      <option value="arb-mainnet">Arbitrum</option>
+      <option value="base-mainnet">Base</option>
+      <option value="astar-mainnet">Astar</option>
+      <option value="starknet-mainnet">Starknet</option>
+	  <option value="ink-mainnet">Ink</option>
+	  <option value="avax-mainnet">Avalanche</option>
+	  <option value="berachain-mainnet">Berachain</option>
     </select>  
     <label id="input-label" for="collection-addresses-input">Collection Addresses (one per line):</label>
     <textarea id="collection-addresses-input" rows="20" cols="40"></textarea>
@@ -141,7 +145,7 @@
     let logBox = document.getElementById('log-box');
 
     snapshotButton.onclick = async function() {
-      let apiKey = "DhddRwiV1Am5ZbEJE7RUniQ2CQmxD5Nt";
+      let apiKey = "tPWqgHC6-1dU8Y9Wdc-50dRrcc4nhsIh";
       let collectionAddresses = collectionAddressesInput.value.trim().split('\n');
       let blockNumber = blockNumberInput.value.trim();
       let includeBalance = includeBalanceCheckbox.checked;
