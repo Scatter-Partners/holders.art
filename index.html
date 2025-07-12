@@ -93,6 +93,18 @@
       text-decoration: underline;
       color: #ff3d00;
     }
+    .info-box {
+      background-color: #f0f8ff;
+      border: 1px solid #007bff;
+      border-radius: 5px;
+      padding: 10px;
+      margin: 10px 0;
+      width: 350px;
+      font-size: 14px;
+    }
+    .info-box strong {
+      color: #007bff;
+    }
   </style>
 </head>
 <body>
@@ -104,8 +116,16 @@
   <br><br>
   <div id="title">Snapshot Multiple Collections</div>
   <div id="description">Supported networks: Ethereum, Sepolia, Abstract, Polygon, Optimism, Arbitrum, Base, Astar, Starknet, Ink, Avalanche, Berachain, ApeChain</div>
+  
+  <div class="info-box">
+    <strong>Chain Prefix Format:</strong><br>
+    You can specify a chain for each address using the format <code>chain:address</code><br>
+    Examples: <code>eth:0x123...</code>, <code>polygon:0xabc...</code><br>
+    Available prefixes: eth, sepolia, goerli, abstract, polygon, mumbai, opt, opt-sepolia, opt-goerli, arb, base, astar, starknet, ink, avax, berachain, apechain
+  </div>
+  
   <div id="text-container">
-    <label id="input-label" for="chain-select">Select Chain:</label>
+    <label id="input-label" for="chain-select">Default Chain (for addresses without prefix):</label>
     <select id="chain-select">
       <option value="eth-mainnet">Ethereum</option>
       <option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
@@ -126,18 +146,39 @@
 	  <option value="apechain-mainnet">ApeChain</option>
     </select>  
     <label id="input-label" for="collection-addresses-input">Collection Addresses (one per line):</label>
-    <textarea id="collection-addresses-input" rows="20" cols="40"></textarea>
+    <textarea id="collection-addresses-input" rows="20" cols="40" placeholder="0x123...&#10;eth:0xabc...&#10;polygon:0xdef..."></textarea>
     <label id="input-label" for="block-number-input">Block Number (optional):</label>
     <input id="block-number-input" type="text" placeholder="Enter Block Number">
     <label id="input-label" for="include-balance-checkbox">Include token balance:</label>
     <input id="include-balance-checkbox" type="checkbox">
     <label id="input-label" for="slowmode-checkbox">Slowmode (use if you have long list):</label>
-    <input id="slowmode-checkbox" type="checkbox">
+    <input id="slowmode-checkbox" type="checkbox" checked>
   </div>
   <button id="snapshot-button">Get Multi-Snapshot</button>
   <textarea id="log-box" readonly>
   </textarea>  
   <script>
+    // Chain prefix mapping
+    const chainPrefixMap = {
+      'eth': 'eth-mainnet',
+      'sepolia': 'eth-sepolia',
+      'goerli': 'eth-goerli',
+      'abstract': 'abstract-mainnet',
+      'polygon': 'polygon-mainnet',
+      'mumbai': 'polygon-mumbai',
+      'opt': 'opt-mainnet',
+      'opt-sepolia': 'opt-sepolia',
+      'opt-goerli': 'opt-goerli',
+      'arb': 'arb-mainnet',
+      'base': 'base-mainnet',
+      'astar': 'astar-mainnet',
+      'starknet': 'starknet-mainnet',
+      'ink': 'ink-mainnet',
+      'avax': 'avax-mainnet',
+      'berachain': 'berachain-mainnet',
+      'apechain': 'apechain-mainnet'
+    };
+
     let snapshotButton = document.getElementById('snapshot-button');
     let collectionAddressesInput = document.getElementById('collection-addresses-input');
     let blockNumberInput = document.getElementById('block-number-input');
@@ -147,7 +188,7 @@
 
     snapshotButton.onclick = async function() {
       let apiKey = "tPWqgHC6-1dU8Y9Wdc-50dRrcc4nhsIh";
-      let collectionAddresses = collectionAddressesInput.value.trim().split('\n');
+      let collectionAddresses = collectionAddressesInput.value.trim().split('\n').filter(addr => addr.trim());
       let blockNumber = blockNumberInput.value.trim();
       let includeBalance = includeBalanceCheckbox.checked;
       let slowmode = slowmodeCheckbox.checked;
@@ -157,7 +198,7 @@
         return;
       }
 
-      if (!collectionAddresses[0]) {
+      if (!collectionAddresses.length) {
         alert('Please enter at least one collection address.');
         return;
       }
@@ -178,20 +219,53 @@
       snapshotButton.innerText = 'Get Multi-Snapshot';
     };
 
+    function parseAddressWithChain(addressString, defaultChain) {
+      const parts = addressString.trim().split(':');
+      
+      if (parts.length === 2) {
+        const chainPrefix = parts[0].toLowerCase();
+        const address = parts[1];
+        
+        if (chainPrefixMap[chainPrefix]) {
+          return {
+            chain: chainPrefixMap[chainPrefix],
+            address: address,
+            displayName: `${chainPrefix}:${address}`
+          };
+        } else {
+          // Invalid chain prefix, treat the whole thing as an address
+          return {
+            chain: defaultChain,
+            address: addressString.trim(),
+            displayName: addressString.trim()
+          };
+        }
+      } else {
+        // No chain prefix
+        return {
+          chain: defaultChain,
+          address: addressString.trim(),
+          displayName: addressString.trim()
+        };
+      }
+    }
+
     async function snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance, slowmode) {
       let mergedLines = [];
       
-      const chain = document.getElementById('chain-select').value;
+      const defaultChain = document.getElementById('chain-select').value;
 
-      for (let address of collectionAddresses) {
+      for (let addressString of collectionAddresses) {
+        const { chain, address, displayName } = parseAddressWithChain(addressString, defaultChain);
+        
         const fetchURL = `https://${chain}.g.alchemy.com/nft/v2/${apiKey}/getOwnersForCollection?contractAddress=${address}&blockNumber=${blockNumber}&withTokenBalances=${includeBalance}`;
 
-        logBox.value += 'Fetching owners for ' + address + '...\n';
+        logBox.value += `Fetching owners for ${displayName} on ${chain}...\n`;
 
         let response = await fetch(fetchURL);
 
         if (!response.ok) {
-          throw new Error('Received HTTP ' + response.status + ' from Alchemy API.');
+          throw new Error(`Received HTTP ${response.status} from Alchemy API for ${displayName}.`);
         }
 
         let data = await response.json();
@@ -206,7 +280,7 @@
         }
         mergedLines.push(...ownerAddresses);
 
-        logBox.value += 'Fetched ' + ownerAddresses.length + ' owner(s) for ' + address + '.\n';
+        logBox.value += `Fetched ${ownerAddresses.length} owner(s) for ${displayName}.\n`;
 
         if (slowmode) {
           await new Promise(resolve => setTimeout(resolve, 5000));
