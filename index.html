@@ -115,13 +115,13 @@
   
   <br><br>
   <div id="title">Snapshot Multiple Collections</div>
-  <div id="description">Supported networks: Ethereum, Sepolia, Abstract, Polygon, Optimism, Arbitrum, Base, Astar, Starknet, Ink, Avalanche, Berachain, ApeChain</div>
+  <div id="description">Supported networks: Ethereum, Sepolia, Abstract, Polygon, Optimism, Arbitrum, Base, Astar, Starknet, Ink, Avalanche, Berachain, ApeChain, Monad, Monad Testnet</div>
   
   <div class="info-box">
     <strong>Chain Prefix Format:</strong><br>
     You can specify a chain for each address using the format <code>chain:address</code><br>
     Examples: <code>eth:0x123...</code>, <code>polygon:0xabc...</code><br>
-    Available prefixes: eth, sepolia, goerli, abstract, polygon, mumbai, opt, opt-sepolia, opt-goerli, arb, base, astar, starknet, ink, avax, berachain, apechain
+    Available prefixes: eth, sepolia, goerli, abstract, polygon, mumbai, opt, opt-sepolia, opt-goerli, arb, base, astar, starknet, ink, avax, berachain, apechain, monad, monad-testnet
   </div>
   
   <div id="text-container">
@@ -144,6 +144,8 @@
 	  <option value="avax-mainnet">Avalanche</option>
 	  <option value="berachain-mainnet">Berachain</option>
 	  <option value="apechain-mainnet">ApeChain</option>
+	  <option value="monad-mainnet">Monad</option>
+	  <option value="monad-testnet">Monad Testnet</option>
     </select>  
     <label id="input-label" for="collection-addresses-input">Collection Addresses (one per line):</label>
     <textarea id="collection-addresses-input" rows="20" cols="40" placeholder="0x123...&#10;eth:0xabc...&#10;polygon:0xdef..."></textarea>
@@ -176,7 +178,9 @@
       'ink': 'ink-mainnet',
       'avax': 'avax-mainnet',
       'berachain': 'berachain-mainnet',
-      'apechain': 'apechain-mainnet'
+      'apechain': 'apechain-mainnet',
+      'monad': 'monad-mainnet',
+      'monad-testnet': 'monad-testnet'
     };
 
     let snapshotButton = document.getElementById('snapshot-button');
