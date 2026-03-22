@@ -2,7 +2,7 @@
 <html>
 <head>
   <title>Holders.art - Snapshot Multiple Collections</title>
-  
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
   <meta name="title" content="Holders.art Snapshot Multiple NFT Collection Holders at Once!" />
@@ -21,144 +21,352 @@
   <meta name="twitter:description" content="Holders.art removes the tedious work of getting and merging multiple collection snapshots." />
   <meta property="og:image" content="https://www.holders.art/preview.png" />  
   
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700;900&display=swap" rel="stylesheet">
-  <style>
-    body {
-      font-family: 'Roboto', sans-serif;
-    }
-  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.8/FileSaver.min.js"></script>
   <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
+      margin: 0;
+      background: #f9f9f8;
+      color: #242424;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      padding: 64px 20px 72px;
     }
-    #title {
-      text-align: center;
-      font-size: 24px;
-      font-weight: bold;
+
+    .page {
+      max-width: 620px;
+      margin: 0 auto;
     }
-    #text-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-bottom: 20px;
+
+    /* ── HEADER ── */
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+      color: #242424;
     }
-    #input-label {
-      font-weight: bold;
+
+    .subtitle {
+      color: #888;
+      font-size: 13px;
+      margin-bottom: 28px;
     }
-    #api-key-input,
-    #collection-addresses-input,
-    #block-number-input {
-      margin-top: 10px;
-      padding: 5px;
-      width: 350px;
-      border: 1px solid #bbb;
-      border-radius: 5px;
-    }
-    #include-balance-checkbox,
-    #slowmode-checkbox {
-      margin-top: 10px;
-    }
-    #snapshot-button {
-      padding: 10px;
-      border-radius: 5px;
-      border: none;
-      color: white;
-      background-color: #007bff;
-      cursor: pointer;
-    }
-    #snapshot-button[disabled] {
-      background-color: #ccc;
-    }
-    #log-box {
-      margin-top: 20px;
-      padding: 5px;
-      width: 350px;
-      height: 200px;
-      border: 1px solid #bbb;
-      border-radius: 5px;
-      overflow: auto;
-      white-space: pre-wrap;
-    }
+
+    /* ── STICKY LINKS ── */
     #sticky-link {
       position: fixed;
       top: 10px;
       left: 10px;
-      background-color: white;
       padding: 5px;
       border-radius: 5px;
-      text-decoration: underline;
-      color: #ff3d00;
-    }
-    .info-box {
-      background-color: #f0f8ff;
-      border: 1px solid #007bff;
-      border-radius: 5px;
-      padding: 10px;
-      margin: 10px 0;
-      width: 350px;
       font-size: 14px;
+      line-height: 1.6;
     }
-    .info-box strong {
-      color: #007bff;
+
+    #sticky-link a {
+      color: #242424;
+      text-decoration: underline;
+    }
+
+    /* ── INFO CARD ── */
+    .info-card {
+      background: #fff;
+      border: 1px solid #e8e8e6;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 24px;
+      color: #4b4b4b;
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    .info-card p {
+      margin: 0 0 8px;
+    }
+
+    .info-card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-card code {
+      background: #f4f4f2;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    /* ── FORM FIELDS ── */
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field:last-of-type {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8a8a8a;
+      margin-bottom: 8px;
+    }
+
+    select {
+      width: 100%;
+      border: 1px solid #e0e0de;
+      border-radius: 6px;
+      padding: 11px 36px 11px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #242424;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23bbb'/%3E%3C/svg%3E") no-repeat right 12px center;
+      outline: none;
+      transition: border-color 0.15s;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    select:focus {
+      border-color: #aaa;
+    }
+
+    textarea,
+    input[type="text"] {
+      width: 100%;
+      border: 1px solid #e0e0de;
+      border-radius: 6px;
+      padding: 11px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #242424;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus,
+    input[type="text"]:focus {
+      border-color: #aaa;
+    }
+
+    textarea::placeholder,
+    input[type="text"]::placeholder {
+      color: #bbb;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #e8e8e6;
+      margin: 24px 0;
+    }
+
+    /* ── CHECKBOXES ── */
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: #242424;
+      cursor: pointer;
+      margin: 0;
+      flex-shrink: 0;
+    }
+
+    .checkbox-row label {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 13px;
+      font-weight: 500;
+      color: #555;
+      cursor: pointer;
+    }
+
+    /* ── BUTTON ── */
+    #snapshot-button {
+      width: 100%;
+      padding: 13px;
+      border-radius: 6px;
+      border: none;
+      color: white;
+      background: #242424;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    #snapshot-button:hover:not([disabled]) {
+      background: #333;
+    }
+
+    #snapshot-button:active:not([disabled]) {
+      transform: scale(0.99);
+    }
+
+    #snapshot-button[disabled] {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    /* ── LOG BOX ── */
+    .result-section {
+      margin-top: 24px;
+    }
+
+    .result-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #8a8a8a;
+      margin-bottom: 8px;
+    }
+
+    #log-box {
+      display: block;
+      width: 100%;
+      height: 230px;
+      border: 1px solid #e8e8e6;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+      color: #444;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.65;
+      resize: vertical;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      outline: none;
+    }
+
+    #log-box::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    #log-box::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #log-box::-webkit-scrollbar-thumb {
+      background: #e0e0de;
+      border-radius: 4px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      body {
+        padding: 58px 14px 40px;
+      }
+
+      h1 {
+        font-size: 20px;
+      }
+
+      .info-card {
+        padding: 14px;
+      }
     }
   </style>
 </head>
 <body>
-  <div id="sticky-link" >
+  <div id="sticky-link">
     <a href="https://webtools.scatter.art/">Scatter Partners Webtools</a><br>
     <a href="https://www.scatter.art/">Scatter</a>
   </div>
-  
-  <br><br>
-  <div id="title">Snapshot Multiple Collections</div>
-  <div id="description">Supported networks: Ethereum, Sepolia, Abstract, Polygon, Optimism, Arbitrum, Base, Astar, Starknet, Ink, Avalanche, Berachain, ApeChain, Monad, Monad Testnet</div>
-  
-  <div class="info-box">
-    <strong>Chain Prefix Format:</strong><br>
-    You can specify a chain for each address using the format <code>chain:address</code><br>
-    Examples: <code>eth:0x123...</code>, <code>polygon:0xabc...</code><br>
-    Available prefixes: eth, sepolia, goerli, abstract, polygon, mumbai, opt, opt-sepolia, opt-goerli, arb, base, astar, starknet, ink, avax, berachain, apechain, monad, monad-testnet
-  </div>
-  
-  <div id="text-container">
-    <label id="input-label" for="chain-select">Default Chain (for addresses without prefix):</label>
-    <select id="chain-select">
-      <option value="eth-mainnet">Ethereum</option>
-      <option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
-      <option value="eth-goerli">Ethereum Goerli (Testnet)</option>
-	  <option value="abstract-mainnet">Abstract</option>
-      <option value="polygon-mainnet">Polygon</option>
-      <option value="polygon-mumbai">Polygon Mumbai (Testnet)</option>
-      <option value="opt-mainnet">Optimism</option>
-      <option value="opt-sepolia">Optimism Sepolia (Testnet)</option>
-      <option value="opt-goerli">Optimism Goerli (Testnet)</option>
-      <option value="arb-mainnet">Arbitrum</option>
-      <option value="base-mainnet">Base</option>
-      <option value="astar-mainnet">Astar</option>
-      <option value="starknet-mainnet">Starknet</option>
-	  <option value="ink-mainnet">Ink</option>
-	  <option value="avax-mainnet">Avalanche</option>
-	  <option value="berachain-mainnet">Berachain</option>
-	  <option value="apechain-mainnet">ApeChain</option>
-	  <option value="monad-mainnet">Monad</option>
-	  <option value="monad-testnet">Monad Testnet</option>
-    </select>  
-    <label id="input-label" for="collection-addresses-input">Collection Addresses (one per line):</label>
-    <textarea id="collection-addresses-input" rows="20" cols="40" placeholder="0x123...&#10;eth:0xabc...&#10;polygon:0xdef..."></textarea>
-    <label id="input-label" for="block-number-input">Block Number (optional):</label>
-    <input id="block-number-input" type="text" placeholder="Enter Block Number">
-    <label id="input-label" for="include-balance-checkbox">Include token balance:</label>
-    <input id="include-balance-checkbox" type="checkbox">
-    <label id="input-label" for="slowmode-checkbox">Slowmode (use if you have long list):</label>
-    <input id="slowmode-checkbox" type="checkbox" checked>
-  </div>
-  <button id="snapshot-button">Get Multi-Snapshot</button>
-  <textarea id="log-box" readonly>
-  </textarea>  
+
+  <main class="page">
+    <h1>Snapshot Multiple Collections</h1>
+    <p class="subtitle">Snapshot holders across multiple collections and chains.</p>
+
+    <section class="info-card">
+      <p><strong>Chain Prefix Format:</strong> You can specify a chain for each address using the format <code>chain:address</code></p>
+      <p>Examples: <code>eth:0x123...</code>, <code>polygon:0xabc...</code></p>
+      <p>Available prefixes: eth, sepolia, goerli, abstract, polygon, mumbai, opt, opt-sepolia, opt-goerli, arb, base, astar, starknet, ink, avax, berachain, apechain, monad, monad-testnet</p>
+    </section>
+
+    <div class="field">
+      <label for="chain-select">Default Chain</label>
+      <select id="chain-select">
+        <option value="eth-mainnet">Ethereum</option>
+        <option value="eth-sepolia">Ethereum Sepolia (Testnet)</option>
+        <option value="eth-goerli">Ethereum Goerli (Testnet)</option>
+        <option value="abstract-mainnet">Abstract</option>
+        <option value="polygon-mainnet">Polygon</option>
+        <option value="polygon-mumbai">Polygon Mumbai (Testnet)</option>
+        <option value="opt-mainnet">Optimism</option>
+        <option value="opt-sepolia">Optimism Sepolia (Testnet)</option>
+        <option value="opt-goerli">Optimism Goerli (Testnet)</option>
+        <option value="arb-mainnet">Arbitrum</option>
+        <option value="base-mainnet">Base</option>
+        <option value="astar-mainnet">Astar</option>
+        <option value="starknet-mainnet">Starknet</option>
+        <option value="ink-mainnet">Ink</option>
+        <option value="avax-mainnet">Avalanche</option>
+        <option value="berachain-mainnet">Berachain</option>
+        <option value="apechain-mainnet">ApeChain</option>
+        <option value="monad-mainnet">Monad</option>
+        <option value="monad-testnet">Monad Testnet</option>
+      </select>
+    </div>
+
+    <hr class="divider">
+
+    <div class="field">
+      <label for="collection-addresses-input">Collection Addresses</label>
+      <textarea id="collection-addresses-input" rows="12" placeholder="0x123...&#10;eth:0xabc...&#10;polygon:0xdef..."></textarea>
+    </div>
+
+    <div class="field">
+      <label for="block-number-input">Block Number (Optional)</label>
+      <input id="block-number-input" type="text" placeholder="Enter block number">
+    </div>
+
+    <hr class="divider">
+
+    <div class="checkbox-row">
+      <input id="include-balance-checkbox" type="checkbox">
+      <label for="include-balance-checkbox">Include token balance</label>
+    </div>
+
+    <div class="checkbox-row">
+      <input id="slowmode-checkbox" type="checkbox" checked>
+      <label for="slowmode-checkbox">Slowmode (use if you have long list)</label>
+    </div>
+
+    <hr class="divider">
+
+    <button id="snapshot-button">Get Multi-Snapshot</button>
+
+    <div class="result-section">
+      <span class="result-label">Activity Log</span>
+      <textarea id="log-box" readonly></textarea>
+    </div>
+  </main>
   <script>
     // Chain prefix mapping
     const chainPrefixMap = {
@@ -225,11 +433,11 @@
 
     function parseAddressWithChain(addressString, defaultChain) {
       const parts = addressString.trim().split(':');
-      
+
       if (parts.length === 2) {
         const chainPrefix = parts[0].toLowerCase();
         const address = parts[1];
-        
+
         if (chainPrefixMap[chainPrefix]) {
           return {
             chain: chainPrefixMap[chainPrefix],
@@ -256,12 +464,12 @@
 
     async function snapshotCollections(apiKey, collectionAddresses, blockNumber, includeBalance, slowmode) {
       let mergedLines = [];
-      
+
       const defaultChain = document.getElementById('chain-select').value;
 
       for (let addressString of collectionAddresses) {
         const { chain, address, displayName } = parseAddressWithChain(addressString, defaultChain);
-        
+
         const fetchURL = `https://${chain}.g.alchemy.com/nft/v2/${apiKey}/getOwnersForCollection?contractAddress=${address}&blockNumber=${blockNumber}&withTokenBalances=${includeBalance}`;
 
         logBox.value += `Fetching owners for ${displayName} on ${chain}...\n`;
