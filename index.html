@@ -540,8 +540,9 @@
 
     <button id="snapshot-button"
       :class="{ cancelling: scanState.scanning }"
+      :disabled="scanState.cancelling"
       @click="scanState.scanning ? cancelScan() : startScan()">
-      {{ scanState.scanning ? 'Cancel Scan' : 'Get Multi-Snapshot' }}
+      {{ scanState.cancelling ? 'Cancelling...' : scanState.scanning ? 'Cancel Scan' : 'Get Multi-Snapshot' }}
     </button>
     <div v-if="statusState.visible" class="status" :class="statusState.type">
       {{ statusState.message }}
@@ -673,6 +674,7 @@
         const scanState = Vue.reactive({
           scanning: false,
           cancelled: false,
+          cancelling: false,
           globalWalletMap: {},
           totalFailedIds: 0,
           totalTokensFound: 0,
@@ -944,6 +946,7 @@
           if (scanState.scanning) return
           scanState.scanning = true
           scanState.cancelled = false
+          scanState.cancelling = false
           hideStatus()
 
           const rawLines = formState.collectionAddresses.trim().split('\n').filter(a => a.trim())
@@ -1139,8 +1142,8 @@
             const walletMap = scanState.globalWalletMap
             const wallets = Object.keys(walletMap)
 
-            if (wallets.length === 0 && scanState.cancelled) {
-              log('warning', 'Scan cancelled. No results to download.')
+            if (scanState.cancelled) {
+              log('warning', 'Scan cancelled. No file downloaded.')
             } else {
               let csvContent
               if (formState.includeBalance) {
@@ -1162,10 +1165,11 @@
             log('error', `ERROR: ${String(e.message || 'Scan failed.')}`)
           } finally {
             scanState.scanning = false
+            scanState.cancelling = false
           }
         }
 
-        const cancelScan = () => { scanState.cancelled = true }
+        const cancelScan = () => { scanState.cancelled = true; scanState.cancelling = true }
         const clearLog = () => { scanState.logs = [] }
 
         return {
