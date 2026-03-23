@@ -501,7 +501,7 @@
     </section>
 
     <div class="field">
-      <label for="chain-select">Default Chain</label>
+      <label for="chain-select">Default Chain (when no chain prefix is provided)</label>
       <select id="chain-select" v-model="formState.chain" :disabled="scanState.scanning">
         <option v-for="chainKey in chainOrder" :key="chainKey" :value="chainKey">
           {{ CHAIN_REGISTRY[chainKey].label }}
