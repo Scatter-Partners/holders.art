@@ -556,7 +556,7 @@
       >
         <span class="col-icon">
           <template v-if="col.status === 'done'">&#9745;</template>
-          <template v-else-if="col.status === 'skipped' || col.status === 'cancelled'">&#8212;</template>
+          <template v-else-if="col.status === 'skipped' || col.status === 'cancelled'">-</template>
           <template v-else-if="col.status === 'pending'">&#9744;</template>
           <template v-else><span class="spinner">&#10227;</span></template>
         </span>
