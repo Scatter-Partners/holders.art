@@ -921,11 +921,6 @@
             if (!usingFallback && detectionFailed && CHAIN_REGISTRY[chain].alchemyFallback !== false) {
               try {
                 detected = await detectTokenRange(alchemyRpc(chain), address, blockTag)
-                const fallbackDetectionSucceeded = detected && (detected.supply !== null || detected.startId !== null)
-                if (fallbackDetectionSucceeded) {
-                  usingFallback = true
-                  log('warning', 'Public RPC detection failed, switched to Alchemy fallback.')
-                }
               } catch { /* fallback also failed; detected stays as-is */ }
             }
 
