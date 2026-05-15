@@ -1254,32 +1254,18 @@
             try {
               return await batchOwnerOf(callbacks.getActiveRpc(chain), contract, batch, blockTag)
             } catch (e) {
-              if (attempt === 0) {
-                const fallbackResult = await tryAlchemyFallbackIfAvailable()
-                if (fallbackResult) return fallbackResult
-              }
+              callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt + 1}/4 (${String(e.message || '').slice(0, 45)})`)
+              await sleep(RETRY_DELAYS_MS[attempt])
 
-              if (attempt < 4) {
-                callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt + 1}/4 (${String(e.message || '').slice(0, 45)})`)
-                await sleep(RETRY_DELAYS_MS[attempt])
+              if (attempt === 3) {
+                if (callbacks.isUsingFallback()) return false
+                if (CHAIN_REGISTRY[chain].alchemyFallback === false) return false
+                callbacks.setUsingFallback(true)
+                callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
               }
             }
           }
           return null
-
-
-          // Support
-          async function tryAlchemyFallbackIfAvailable() {
-            if (callbacks.isUsingFallback()) return false
-            if (CHAIN_REGISTRY[chain].alchemyFallback === false) return false
-            callbacks.setUsingFallback(true)
-            callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
-            try {
-              return await batchOwnerOf(alchemyRpc(chain), contract, batch, blockTag)
-            } catch {
-              return false
-            }
-          }
         }
 
 
