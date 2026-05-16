@@ -798,7 +798,7 @@
 
               const { chain, address, displayName } = validCollections[collectionIndex]
               const chainConfig = CHAIN_CONFIG[chain]
-              let usingFallback = !chainConfig.publicRpc
+              let isUsingFallback = !chainConfig.publicRpc
               const blockTag = resolveBlockTag(chain, displayName)
 
               scanState.collectionStatuses[collectionIndex].status = 'detecting'
@@ -810,11 +810,9 @@
               collectionFound = 0
 
               log('info', `\u2500\u2500 Collection ${collectionIndex + 1}/${validCollections.length}: ${displayName} \u2500\u2500`)
-              log('info', `Chain: ${chainConfig.label} | RPC: ${usingFallback ? 'Alchemy' : 'public'}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
+              log('info', `Chain: ${chainConfig.label} | RPC: ${isUsingFallback ? 'Alchemy' : 'public'}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
 
-              const rangeResult = await detectRangeWithFallback(chain, address, blockTag, usingFallback)
-              const detectedRange = rangeResult.detected
-              usingFallback = rangeResult.usingFallback
+              const detectedRange = await detectRange(chain, address, blockTag, isUsingFallback)
 
               if (!detectedRange || detectedRange.startId === null) {
                 scanState.collectionStatuses[collectionIndex].status = 'skipped'
@@ -838,9 +836,9 @@
               scanState.collectionStatuses[collectionIndex].status = 'scanning'
               await scanTokenIds(chain, address.toLowerCase(), allIds, blockTag, {
                 shouldStop: () => scanState.cancelled,
-                getActiveRpc: (ch) => getActiveRpc(ch, usingFallback),
-                isUsingFallback: () => usingFallback,
-                setUsingFallback: (v) => { usingFallback = v },
+                getActiveRpc: (ch) => getActiveRpc(ch, isUsingFallback),
+                isUsingFallback: () => isUsingFallback,
+                setUsingFallback: (v) => { isUsingFallback = v },
                 log,
                 onBatchFailed,
                 onBatchResults: processBatchResults,
@@ -876,7 +874,7 @@
 
             const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
             const collections = rawLines.map(raw => {
-              const parsed = parseAddressWithChain(raw)
+              const parsed = parseAddress(raw)
               return ETH_ADDRESS_RE.test(parsed.address) ? parsed : { ...parsed, invalid: true }
             })
 
@@ -888,7 +886,7 @@
 
             return { collections, valid }
 
-            function parseAddressWithChain(addressString) {
+            function parseAddress(addressString) {
               const parts = addressString.trim().split(':')
               if (parts.length === 2) {
                 const prefix = parts[0].trim().toLowerCase()
@@ -908,22 +906,23 @@
             return 'latest'
           }
 
-          async function detectRangeWithFallback(chain, address, blockTag, usingFallback) {
+          async function detectRange(chain, address, blockTag, isUsingFallback) {
             let detected
             try {
-              detected = await detectTokenRange(getActiveRpc(chain, usingFallback), address, blockTag)
+              detected = await detectTokenRange(getActiveRpc(chain, isUsingFallback), address, blockTag)
             } catch (e) {
               log('error', `Range detection failed: ${String(e.message || '').slice(0, 60)}`)
             }
 
-            const detectionFailed = !detected || (detected.supply === null && detected.startId === null)
-            if (!usingFallback && detectionFailed && CHAIN_CONFIG[chain].alchemyFallback !== false) {
+            const noRangeDetected = !detected || (detected.supply === null && detected.startId === null)
+            const alchemyFallbackEnabled = CHAIN_CONFIG[chain].alchemyFallback !== false
+            if (!isUsingFallback && noRangeDetected && alchemyFallbackEnabled) {
               try {
                 detected = await detectTokenRange(alchemyRpc(chain), address, blockTag)
               } catch { /* fallback also failed; detected stays as-is */ }
             }
 
-            return { detected, usingFallback }
+            return detected
           }
 
           function onBatchFailed(batch) {
@@ -954,13 +953,13 @@
           }
 
           function updateProgress(done, total) {
-            const pct = total > 0 ? Math.round((done / total) * 100) : 0
+            const percentage = total > 0 ? Math.round((done / total) * 100) : 0
             const elapsed = (Date.now() - collectionStartTime) / 1000
             const rate = done / Math.max(elapsed, 0.1)
             const eta = rate > 0 ? Math.round((total - done) / rate) : null
-            const etaText = eta !== null ? ` \u00b7 ~${formatTime(eta)} remaining` : ''
-            scanState.collectionProgressPercent = pct
-            scanState.collectionProgressLabel = `${pct}% \u00b7 ${done.toLocaleString()}/${total.toLocaleString()} tokens queried${etaText}`
+            const etaText = eta ? ` \u00b7 ~${formatTime(eta)} remaining` : ''
+            scanState.collectionProgressPercent = percentage
+            scanState.collectionProgressLabel = `${percentage}% \u00b7 ${done.toLocaleString()}/${total.toLocaleString()} tokens queried${etaText}`
           }
 
           function buildAndDownloadCsv() {
@@ -992,30 +991,28 @@
         // ----------------------------------------------------
         // -- RPC
         // ----------------------------------------------------
-        const getActiveRpc = (chain, usingFallback) => {
-          if (usingFallback) return alchemyRpc(chain)
+        const getActiveRpc = (chain, isUsingFallback) => {
+          if (isUsingFallback) return alchemyRpc(chain)
           return CHAIN_CONFIG[chain].publicRpc || alchemyRpc(chain)
         }
 
         const batchOwnerOf = async (rpc, contract, tokenIds, blockTag = 'latest') => {
-          const res = await fetch(rpc, {
+          const response = await fetch(rpc, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(tokenIds.map((tokenId, i) => buildRequest(tokenId, i))),
             signal: AbortSignal.timeout(30000),
           })
 
-          // RPC nodes may return a single object for a 1-item batch - .flat() normalises both shapes.
-          const entries = [await res.json()].flat().sort((a, b) => (a.id || 0) - (b.id || 0))
+          const entries = [await response.json()].flat().sort((a, b) => (a.id || 0) - (b.id || 0))
           const errors = entries.filter(entry => entry?.error)
 
-          if (!errors.length) return entries
-
-          // Only throw for transient errors so callers can retry.
-          if (errors.some(isTransient)) {
+          if (errors.length > 0 && errors.some(isTransient)) {
             throw new Error(errors[0].error.message || JSON.stringify(errors[0].error))
           }
+
           return entries
+
 
           // Support
           function buildRequest(tokenId, id) {
@@ -1027,8 +1024,8 @@
             }
           }
 
-          // Returns true if an error entry is transient (rate limit, network, etc.) and worth retrying.
           function isTransient(entry) {
+            // Returns true if an error entry is transient (rate limit, network, etc.)
             const code = entry.error.code
             const msg = (entry.error.message || '').toLowerCase()
             const isRevert = code === 3 || msg.includes('revert')
@@ -1052,18 +1049,13 @@
         // ----------------------------------------------------
         // -- Token Range Detection
         // ----------------------------------------------------
-
         const detectTokenRange = async (rpcUrl, contract, blockTag = 'latest') => {
           // Detects the token ID range for an ERC-721 contract.
           // Returns { supply, startId } where:
           //   startId - 0 or 1 depending on where the collection starts; null if undetectable.
-          //   supply  - exclusive upper bound of the ID range, i.e. iterate with
-          //             `for (let i = startId; i < supply; i++)`. Null if totalSupply()
-          //             is unavailable. Burns make totalSupply() unreliable, so we probe
-          //             above it with findMaxTokenId to find the real ceiling.
+          //   supply  - exclusive upper bound of the ID range. Null if totalSupply() is unavailable.
           const supply = await fetchTotalSupply()
           const startId = await detectStartId()
-
           if (supply === null) return { supply: null, startId }
 
           // totalSupply() is an unburned-token count, not a max ID. Adjust to get the estimated
@@ -1072,7 +1064,6 @@
           const estimatedEnd = startId === 0 ? supply - 1 : supply
           const actualMax = await findMaxTokenId(rpcUrl, contract, estimatedEnd, blockTag)
           if (actualMax === null) return { supply, startId }
-          // Convert the max token ID back to an exclusive upper bound.
           const resolvedSupply = startId === 0 ? actualMax + 1 : actualMax
 
           return { supply: resolvedSupply, startId }
@@ -1145,12 +1136,6 @@
 
 
           // Support
-          async function ownedAbove(start) {
-            const ids = Array.from({ length: BATCH }, (_, i) => start + i)
-            const results = await batchOwnerOf(rpcUrl, contract, ids, blockTag)
-            return results.some(r => hasOwner(r))
-          }
-
           // Phase 1 - probe the window immediately above knownEnd; bail early if empty.
           async function quickCheck() {
             try {
@@ -1206,13 +1191,18 @@
               return low > knownEnd ? low : null
             }
           }
+
+          async function ownedAbove(start) {
+            const ids = Array.from({ length: BATCH }, (_, i) => start + i)
+            const results = await batchOwnerOf(rpcUrl, contract, ids, blockTag)
+            return results.some(r => hasOwner(r))
+          }
         }
 
 
         // ----------------------------------------------------
         // -- Scanning
         // ----------------------------------------------------
-
         const scanTokenIds = async (chain, contract, tokenIds, blockTag, callbacks) => {
           const chainConfig = CHAIN_CONFIG[chain]
           const concurrency = chainConfig.concurrency || 10
@@ -1222,19 +1212,12 @@
           let done = 0
           let idx = 0
 
-          // Throttle between batches to respect the chain's rate limit.
-          const shouldThrottle = () =>
-            scanDelayMs > 0 &&
-            idx < tokenIds.length &&
-            !callbacks.shouldStop() &&
-            !callbacks.isUsingFallback()
-
           const worker = async () => {
             while (idx < tokenIds.length && !callbacks.shouldStop()) {
               const batch = tokenIds.slice(idx, idx + batchSize)
               idx += batch.length
 
-              const results = await fetchBatchWithRetry(chain, contract, batch, blockTag, callbacks)
+              const results = await fetchBatch(chain, contract, batch, blockTag, callbacks)
               if (results) callbacks.onBatchResults(batch, results)
               else callbacks.onBatchFailed(batch)
 
@@ -1246,9 +1229,19 @@
           }
 
           await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+
+          // support
+          // Throttle between batches to respect the chain's rate limit.
+          function shouldThrottle() {
+            return scanDelayMs > 0 &&
+              idx < tokenIds.length &&
+              !callbacks.shouldStop() &&
+              !callbacks.isUsingFallback()
+          }
         }
 
-        const fetchBatchWithRetry = async (chain, contract, batch, blockTag, callbacks) => {
+        const fetchBatch = async (chain, contract, batch, blockTag, callbacks) => {
           for (let attempt = 0; attempt < 5; attempt++) {
             try {
               return await batchOwnerOf(callbacks.getActiveRpc(chain), contract, batch, blockTag)
