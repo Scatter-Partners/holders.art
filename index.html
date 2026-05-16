@@ -47,7 +47,7 @@
       margin: 0 auto;
     }
 
-    /* ── HEADER ── */
+    /* -- HEADER -- */
     h1 {
       font-size: 22px;
       font-weight: 600;
@@ -62,7 +62,7 @@
       margin-bottom: 28px;
     }
 
-    /* ── STICKY LINKS ── */
+    /* -- STICKY LINKS -- */
     #sticky-link {
       position: fixed;
       top: 10px;
@@ -78,7 +78,7 @@
       text-decoration: underline;
     }
 
-    /* ── INFO CARD ── */
+    /* -- INFO CARD -- */
     .info-card {
       background: #fff;
       border: 1px solid #e8e8e6;
@@ -105,7 +105,7 @@
       font-size: 12px;
     }
 
-    /* ── FORM FIELDS ── */
+    /* -- FORM FIELDS -- */
     .field {
       margin-bottom: 16px;
     }
@@ -188,7 +188,7 @@
       margin: 24px 0;
     }
 
-    /* ── CHECKBOXES ── */
+    /* -- CHECKBOXES -- */
     .checkbox-row {
       display: flex;
       align-items: center;
@@ -220,7 +220,7 @@
       cursor: pointer;
     }
 
-    /* ── BUTTON ── */
+    /* -- BUTTON -- */
     #snapshot-button {
       width: 100%;
       padding: 13px;
@@ -252,7 +252,7 @@
       background: #a03030;
     }
 
-    /* ── STATUS ── */
+    /* -- STATUS -- */
     .status {
       margin-top: 20px;
       font-size: 13px;
@@ -277,7 +277,7 @@
       50% { opacity: 1 }
     }
 
-    /* ── PROGRESS ── */
+    /* -- PROGRESS -- */
     .progress-section {
       margin-top: 28px;
     }
@@ -304,7 +304,7 @@
       text-align: right;
     }
 
-    /* ── STATS ── */
+    /* -- STATS -- */
     .stats {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -335,7 +335,7 @@
       margin-top: 4px;
     }
 
-    /* ── FAILED INFO ── */
+    /* -- FAILED INFO -- */
     .failed-box {
       margin-top: 12px;
       background: #fff8f8;
@@ -347,7 +347,7 @@
       line-height: 1.6;
     }
 
-    /* ── LOG ── */
+    /* -- LOG -- */
     .log-wrap {
       margin-top: 20px;
     }
@@ -421,7 +421,7 @@
     .info  { color: #555; }
     .warning { color: #d97706; }
 
-    /* ── COLLECTION STATUS LIST ── */
+    /* -- COLLECTION STATUS LIST -- */
     .collection-list {
       margin-top: 20px;
       margin-bottom: 8px;
@@ -465,7 +465,7 @@
       animation: spin 1s linear infinite;
     }
 
-    /* ── RESPONSIVE ── */
+    /* -- RESPONSIVE -- */
     @media (max-width: 640px) {
       body {
         padding: 58px 14px 40px;
@@ -504,7 +504,7 @@
       <label for="chain-select">Default Chain (when no chain prefix is provided)</label>
       <select id="chain-select" v-model="formState.chain" :disabled="scanState.scanning">
         <option v-for="chainKey in chainOrder" :key="chainKey" :value="chainKey">
-          {{ CHAIN_REGISTRY[chainKey].label }}
+          {{ CHAIN_CONFIG[chainKey].label }}
         </option>
       </select>
     </div>
@@ -542,7 +542,9 @@
       :class="{ cancelling: scanState.scanning }"
       :disabled="scanState.cancelling"
       @click="scanState.scanning ? cancelScan() : startScan()">
-      {{ scanState.cancelling ? 'Cancelling...' : scanState.scanning ? 'Cancel Scan' : 'Get Multi-Snapshot' }}
+      <span v-if="scanState.cancelling">Cancelling...</span>
+      <span v-else-if="scanState.scanning">Cancel Scan</span>
+      <span v-else>Get Multi-Snapshot</span>
     </button>
     <div v-if="statusState.visible" class="status" :class="statusState.type">
       {{ statusState.message }}
@@ -553,7 +555,12 @@
         v-for="(col, i) in scanState.collectionStatuses"
         :key="i"
         class="collection-row"
-        :class="col.status === 'done' ? 'done' : col.status === 'pending' ? 'pending' : (col.status === 'skipped' || col.status === 'cancelled') ? 'skipped' : 'active'"
+        :class="{
+          done:    col.status === 'done',
+          pending: col.status === 'pending',
+          skipped: col.status === 'skipped' || col.status === 'cancelled',
+          active:  !['done', 'pending', 'skipped', 'cancelled'].includes(col.status),
+        }"
       >
         <span class="col-icon">
           <template v-if="col.status === 'done'">&#9745;</template>
@@ -613,26 +620,25 @@
   <script>
     const app = Vue.createApp({
       setup() {
-        // ── Constants ──
         const OWNER_OF_SIG = '0x6352211e'    // ownerOf(uint256)
         const TOTAL_SUPPLY_SIG = '0x18160ddd' // totalSupply()
         const RETRY_DELAYS_MS = [3000, 6000, 12000, 24000, 48000]
         const ALCHEMY_KEY = 'tPWqgHC6-1dU8Y9Wdc-50dRrcc4nhsIh'
         const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
 
-        const CHAIN_REGISTRY = {
-          'eth-mainnet':          { label: 'Ethereum',      explorer: 'https://etherscan.io',             publicRpc: 'https://eth.drpc.org',                batchSize: 3 },
-          'base-mainnet':         { label: 'Base',          explorer: 'https://basescan.org',             publicRpc: 'https://base.drpc.org',               batchSize: 3 },
-          'arb-mainnet':          { label: 'Arbitrum',      explorer: 'https://arbiscan.io',              publicRpc: 'https://arbitrum.drpc.org',            batchSize: 3 },
+        const CHAIN_CONFIG = {
+          'eth-mainnet':          { label: 'Ethereum',      explorer: 'https://etherscan.io',             publicRpc: 'https://eth.drpc.org',             batchSize: 3 },
+          'base-mainnet':         { label: 'Base',          explorer: 'https://basescan.org',                                                            batchSize: 10, concurrency: 1, scanDelayMs: 800 },
+          'arb-mainnet':          { label: 'Arbitrum',      explorer: 'https://arbiscan.io',              publicRpc: 'https://arb1.arbitrum.io/rpc',     batchSize: 10, concurrency: 1 },
           'polygon-mainnet':      { label: 'Polygon',       explorer: 'https://polygonscan.com',          publicRpc: 'https://polygon.drpc.org' },
-          'apechain-mainnet':     { label: 'ApeChain',      explorer: 'https://apescan.io',               publicRpc: 'https://rpc.apechain.com' },
+          'apechain-mainnet':     { label: 'ApeChain',      explorer: 'https://apescan.io',               publicRpc: 'https://rpc.apechain.com/http' },
           'abstract-mainnet':     { label: 'Abstract',      explorer: 'https://abscan.org',               publicRpc: 'https://api.mainnet.abs.xyz' },
           'ink-mainnet':          { label: 'Ink',           explorer: 'https://explorer.inkonchain.com',  publicRpc: 'https://rpc-gel.inkonchain.com' },
-          'superposition-mainnet':{ label: 'Superposition', explorer: 'https://explorer.superposition.so',publicRpc: 'https://rpc.superposition.so', batchSize: 13, concurrency: 1, scanDelayMs: 500, alchemyFallback: false },
-          'berachain-mainnet':    { label: 'Berachain',     explorer: 'https://berascan.com',             publicRpc: 'https://berachain.drpc.org',           batchSize: 3 },
-          'hyperliquid-mainnet':  { label: 'Hyperliquid',   explorer: 'https://www.hyperscan.com',        publicRpc: 'https://hyperliquid.drpc.org',         batchSize: 3, alchemyFallback: false },
-          'monad-mainnet':        { label: 'Monad',         explorer: 'https://monadexplorer.com',        publicRpc: 'https://rpc.monad.xyz',               batchSize: 15, concurrency: 1, scanDelayMs: 500 },
-          'megaeth-mainnet':      { label: 'MegaETH',       explorer: 'https://megaeth.blockscout.com',   publicRpc: 'https://mainnet.megaeth.com/rpc', concurrency: 2, alchemyFallback: false },
+          'superposition-mainnet':{ label: 'Superposition', explorer: 'https://explorer.superposition.so',publicRpc: 'https://rpc.superposition.so',     batchSize: 20, concurrency: 1, scanDelayMs: 500, alchemyFallback: false },
+          'berachain-mainnet':    { label: 'Berachain',     explorer: 'https://berascan.com',             publicRpc: 'https://berachain.drpc.org',       batchSize: 3 },
+          'hyperliquid-mainnet':  { label: 'Hyperliquid',   explorer: 'https://www.hyperscan.com',        publicRpc: 'https://hyperliquid.drpc.org',     batchSize: 1, scanDelayMs: 50 },
+          'monad-mainnet':        { label: 'Monad',         explorer: 'https://monadexplorer.com',        publicRpc: 'https://rpc.monad.xyz',            batchSize: 15, concurrency: 1, scanDelayMs: 1000 },
+          'megaeth-mainnet':      { label: 'MegaETH',       explorer: 'https://megaeth.blockscout.com',   publicRpc: 'https://mainnet.megaeth.com/rpc',  concurrency: 2 },
         }
 
         const chainPrefixMap = {
@@ -650,20 +656,16 @@
           'megaeth':      'megaeth-mainnet',
         }
 
-        const chainOrder = Object.keys(CHAIN_REGISTRY)
+        const chainOrder = Object.keys(CHAIN_CONFIG)
 
-        // ── Utilities ──
-        const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+        // ----------------------------------------------------
+        // -- Refs
+        // ----------------------------------------------------
+        const logBoxRef = Vue.ref(null)
 
-        const fmtTime = (s) => {
-          if (s < 60) return `${s}s`
-          if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
-          return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
-        }
-
-        const alchemyRpc = (chain) => `https://${chain}.g.alchemy.com/v2/${ALCHEMY_KEY}`
-
-        // ── Reactive State ──
+        // ----------------------------------------------------
+        // -- States
+        // ----------------------------------------------------
         const formState = Vue.reactive({
           chain: 'eth-mainnet',
           collectionAddresses: '',
@@ -697,9 +699,9 @@
           visible: false,
         })
 
-        const logBoxRef = Vue.ref(null)
-
-        // ── Computed ──
+        // ----------------------------------------------------
+        // -- Computed
+        // ----------------------------------------------------
         const stats = Vue.computed(() => ({
           holders: Object.keys(scanState.globalWalletMap).length.toLocaleString(),
           supply: scanState.totalTokensFound.toLocaleString(),
@@ -707,21 +709,569 @@
           progress: scanState.totalTokensQueried.toLocaleString(),
         }))
 
-        // ── Log ──
-        const log = (type = 'info', message = '') => {
-          const box = logBoxRef.value
-          const shouldAutoScroll = !box || box.scrollTop + box.clientHeight >= box.scrollHeight - 24
-          scanState.logs.push({
-            time: new Date().toLocaleTimeString(),
-            message,
-            type,
-          })
-          if (shouldAutoScroll) {
-            Vue.nextTick(() => { if (logBoxRef.value) logBoxRef.value.scrollTop = logBoxRef.value.scrollHeight })
+
+        // ----------------------------------------------------
+        // -- Multi-Collection Orchestrator
+        // ----------------------------------------------------
+        const startScan = async () => {
+          // Orchestrates a full snapshot scan across one or more ERC-721 collections.
+          //
+          // Step 1 - parse and validate input:
+          //   Read the textarea, split by line, parse optional chain prefixes (e.g. "eth:0x..."),
+          //   validate each address. Bail early with a status message if nothing valid is found.
+          //
+          // Step 2 - reset state:
+          //   Clear all counters, logs, and progress indicators so the UI is fresh for this run.
+          //
+          // Step 3 - per-collection loop:
+          //   For each valid collection, in order:
+          //   a) Resolve the block tag - apply the user's block number only to the selected chain;
+          //      other chains always use 'latest' (block numbers are chain-specific).
+          //   b) Detect token range - call detectTokenRange() to find startId and supply, with an
+          //      automatic fallback to Alchemy if the public RPC returns nothing useful.
+          //      Skip the collection if either value cannot be determined.
+          //   c) Scan all token IDs - fan out concurrent workers via scanTokenIds(), each fetching
+          //      batches of ownerOf() calls. Results are decoded and merged into globalWalletMap.
+          //      A per-chain throttle and Alchemy fallback are handled transparently by the callbacks.
+          //
+          // Step 4 - finalise:
+          //   Set failedInfo if any token IDs returned no owner. Generate a CSV from globalWalletMap
+          //   and trigger a file download (skipped if the user cancelled mid-scan).
+
+          if (scanState.scanning) return
+          scanState.scanning = true
+          scanState.cancelled = false
+          scanState.cancelling = false
+          hideStatus()
+
+          const parsed = parseCollections()
+          if (!parsed) {
+            scanState.scanning = false
+            return
+          }
+          const { collections, validCollections } = parsed
+          const userBlockNumber = formState.blockNumber.trim()
+          const hasBlockNumber = userBlockNumber !== ''
+          const blockTagForDefaultChain = hasBlockNumber ? '0x' + parseInt(userBlockNumber, 10).toString(16) : 'latest'
+
+          const startTime = Date.now()
+          let collectionFailed = 0
+          let collectionFound = 0
+          let collectionStartTime = Date.now()
+
+          // Reset scan state
+          scanState.globalWalletMap = {}
+          scanState.totalFailedIds = 0
+          scanState.totalTokensFound = 0
+          scanState.totalTokensQueried = 0
+          scanState.totalTokensToScan = 0
+          scanState.logs = []
+          scanState.collectionStatuses = validCollections.map(c => ({ displayName: c.displayName, status: 'pending' }))
+          scanState.currentCollectionIndex = -1
+          scanState.collectionProgressPercent = 0
+          scanState.collectionProgressLabel = '\u2014'
+          scanState.failedInfo = ''
+          scanState.showProgress = true
+          scanState.showStats = true
+          scanState.showLog = true
+
+
+          // Log invalid addresses now that the log panel is visible.
+          for (const collection of collections) {
+            if (collection.invalid) log('warning', `Skipping invalid address: ${collection.displayName}`)
+          }
+
+          log('info', `Starting scan of ${validCollections.length} collection(s)...`)
+          if (hasBlockNumber) {
+            log('info', `Block number: ${userBlockNumber} (applied to ${CHAIN_CONFIG[formState.chain].label} collections only)`)
+          }
+
+          try {
+            for (let collectionIndex = 0; collectionIndex < validCollections.length; collectionIndex++) {
+              if (scanState.cancelled) {
+                if (scanState.collectionStatuses[collectionIndex]) scanState.collectionStatuses[collectionIndex].status = 'cancelled'
+                log('warning', 'Scan cancelled by user.')
+                break
+              }
+
+              const { chain, address, displayName } = validCollections[collectionIndex]
+              const chainConfig = CHAIN_CONFIG[chain]
+              let isUsingFallback = !chainConfig.publicRpc
+              const blockTag = resolveBlockTag(chain, displayName)
+
+              scanState.collectionStatuses[collectionIndex].status = 'detecting'
+              scanState.currentCollectionIndex = collectionIndex
+              scanState.collectionProgressPercent = 0
+              scanState.collectionProgressLabel = 'Detecting token range...'
+              collectionStartTime = Date.now()
+              collectionFailed = 0
+              collectionFound = 0
+
+              log('info', `\u2500\u2500 Collection ${collectionIndex + 1}/${validCollections.length}: ${displayName} \u2500\u2500`)
+              log('info', `Chain: ${chainConfig.label} | RPC: ${isUsingFallback ? 'Alchemy' : chainConfig.publicRpc}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
+
+              const detectedRange = await detectRange(chain, address, blockTag, isUsingFallback)
+
+              if (!detectedRange || detectedRange.startId === null) {
+                scanState.collectionStatuses[collectionIndex].status = 'skipped'
+                log('error', `Could not detect start ID for ${displayName}. Skipping.`)
+                continue
+              }
+
+              if (detectedRange.supply === null) {
+                scanState.collectionStatuses[collectionIndex].status = 'skipped'
+                log('error', `Could not detect supply for ${displayName}. Skipping.`)
+                continue
+              }
+
+              const tokenStart = detectedRange.startId
+              const tokenEnd = detectedRange.startId === 0 ? detectedRange.supply - 1 : detectedRange.supply
+              const allIds = Array.from({ length: tokenEnd - tokenStart + 1 }, (_, i) => tokenStart + i)
+
+              log('info', `Token range: ${tokenStart} \u2192 ${tokenEnd} (${allIds.length.toLocaleString()} tokens)`)
+              scanState.totalTokensToScan += allIds.length
+
+              scanState.collectionStatuses[collectionIndex].status = 'scanning'
+              await scanTokenIds(chain, address.toLowerCase(), allIds, blockTag, {
+                shouldStop: () => scanState.cancelled,
+                getActiveRpc: (ch) => getActiveRpc(ch, isUsingFallback),
+                isUsingFallback: () => isUsingFallback,
+                setUsingFallback: (v) => { isUsingFallback = v },
+                log,
+                onBatchFailed,
+                onBatchResults: processBatchResults,
+                onProgress: updateProgress,
+              })
+
+              scanState.collectionStatuses[collectionIndex].status = 'done'
+              log('info', `Collection done: ${collectionFound} token(s) found, ${collectionFailed} failed/burned`)
+            }
+
+            if (scanState.totalFailedIds > 0) {
+              scanState.failedInfo = `${scanState.totalFailedIds} token IDs returned no owner across all collections (not yet minted, burned, or RPC error).`
+            }
+
+            buildAndDownloadCsv()
+
+          } catch (e) {
+            showStatus(String(e.message || 'Scan failed.'), 'error')
+            log('error', `ERROR: ${String(e.message || 'Scan failed.')}`)
+          } finally {
+            scanState.scanning = false
+            scanState.cancelling = false
+          }
+
+
+          // Support
+          function parseCollections() {
+            const rawLines = formState.collectionAddresses.trim().split('\n').filter(a => a.trim())
+            if (!rawLines.length) {
+              showStatus('Please enter at least one collection address.', 'error')
+              return null
+            }
+
+            const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
+            const collections = rawLines.map(raw => {
+              const parsed = parseAddress(raw)
+              return ETH_ADDRESS_RE.test(parsed.address) ? parsed : { ...parsed, invalid: true }
+            })
+
+            const validCollections = collections.filter(c => !c.invalid)
+            if (!validCollections.length) {
+              showStatus('No valid addresses found.', 'error')
+              return null
+            }
+
+            return { collections, validCollections }
+
+            function parseAddress(addressString) {
+              const parts = addressString.trim().split(':')
+              if (parts.length === 2) {
+                const prefix = parts[0].trim().toLowerCase()
+                const address = parts[1].trim()
+                const chain = chainPrefixMap[prefix]
+                if (chain) return { chain, address, displayName: `${prefix}:${address}` }
+              }
+              const address = addressString.trim()
+              return { chain: formState.chain, address, displayName: address }
+            }
+          }
+
+          function resolveBlockTag(chain, displayName) {
+            if (!hasBlockNumber) return 'latest'
+            if (chain === formState.chain) return blockTagForDefaultChain
+            log('warning', `Block number ignored for ${displayName} \u2014 block numbers are chain-specific.`)
+            return 'latest'
+          }
+
+          async function detectRange(chain, address, blockTag, isUsingFallback) {
+            const batchSize = CHAIN_CONFIG[chain].batchSize || 20
+            let detected
+            try {
+              detected = await detectTokenRange(getActiveRpc(chain, isUsingFallback), address, blockTag, batchSize)
+            } catch (e) {
+              log('error', `Range detection failed: ${String(e.message || '').slice(0, 60)}`)
+            }
+
+            const noRangeDetected = !detected || detected.supply === null || detected.startId === null
+            const alchemyFallbackEnabled = CHAIN_CONFIG[chain].alchemyFallback !== false
+            if (!isUsingFallback && noRangeDetected && alchemyFallbackEnabled) {
+              try {
+                detected = await detectTokenRange(alchemyRpc(chain), address, blockTag, batchSize)
+              } catch { /* fallback also failed; detected stays as-is */ }
+            }
+
+            return detected
+          }
+
+          function onBatchFailed(batch) {
+            collectionFailed += batch.length
+            scanState.totalFailedIds += batch.length
+            scanState.totalTokensQueried += batch.length
+            log('error', `Batch ${batch[0]}-${batch[batch.length - 1]}: failed after 5 retries`)
+          }
+
+          function processBatchResults(batch, results) {
+            // Decodes owners from a successful batch, updates the wallet map and counters.
+            let found = 0
+            for (let i = 0; i < batch.length; i++) {
+              const entry = i < results.length ? results[i] : null
+              if (!hasOwner(entry)) {
+                collectionFailed++
+                scanState.totalFailedIds++
+                continue
+              }
+              const owner = decodeOwner(entry.result)
+              scanState.globalWalletMap[owner] = (scanState.globalWalletMap[owner] || 0) + 1
+              collectionFound++
+              scanState.totalTokensFound++
+              found++
+            }
+            scanState.totalTokensQueried += batch.length
+            if (found > 0) log('ok', `Token IDs ${batch[0]}-${batch[batch.length - 1]}: ${found} owner(s) found`)
+          }
+
+          function updateProgress(done, total) {
+            const percentage = total > 0 ? Math.round((done / total) * 100) : 0
+            const elapsed = (Date.now() - collectionStartTime) / 1000
+            const rate = done / Math.max(elapsed, 0.1)
+            const eta = rate > 0 ? Math.round((total - done) / rate) : null
+            const etaText = eta ? ` \u00b7 ~${formatTime(eta)} remaining` : ''
+            scanState.collectionProgressPercent = percentage
+            scanState.collectionProgressLabel = `${percentage}% \u00b7 ${done.toLocaleString()}/${total.toLocaleString()} tokens queried${etaText}`
+          }
+
+          function buildAndDownloadCsv() {
+            if (scanState.cancelled) {
+              log('warning', 'Scan cancelled. No file downloaded.')
+              return
+            }
+            const walletMap = scanState.globalWalletMap
+            const wallets = Object.keys(walletMap)
+            const csvContent = formState.includeBalance
+              ? wallets.map(addr => `${addr},${walletMap[addr]}`).join('\n')
+              : wallets.join('\n')
+            const blob = new Blob([csvContent], { type: 'text/plain' })
+            saveAs(blob, `output-${Date.now()}.txt`)
+
+            const elapsed = Math.round((Date.now() - startTime) / 1000)
+            log('ok', `\u2500\u2500 Complete! ${wallets.length} unique holder(s) across all collections (${formatTime(elapsed)}) \u2500\u2500`)
+            scanState.collectionProgressPercent = 100
+            scanState.collectionProgressLabel = `100% \u00b7 Done in ${formatTime(elapsed)}`
           }
         }
 
-        // ── Status ──
+        const cancelScan = () => {
+          scanState.cancelled = true;
+          scanState.cancelling = true
+        }
+
+        // ----------------------------------------------------
+        // -- Token Range Detection
+        // ----------------------------------------------------
+        const detectTokenRange = async (rpcUrl, contract, blockTag = 'latest', batchSize = 20) => {
+          // Detects the token ID range for an ERC-721 contract.
+          // Returns { supply, startId } where:
+          //   startId - 0 or 1 depending on where the collection starts; null if undetectable.
+          //   supply  - exclusive upper bound of the ID range. Null if totalSupply() is unavailable.
+
+          const supply = await fetchTotalSupplyRpc(rpcUrl, contract, blockTag)
+          const startId = await detectStartId()
+          if (supply === null) return { supply: null, startId }
+
+
+          const estimatedEnd = startId === 0 ? supply - 1 : supply
+          const actualMax = await findMaxTokenId(rpcUrl, contract, estimatedEnd, blockTag, batchSize)
+          if (actualMax === null) return { supply, startId }
+          const resolvedSupply = startId === 0 ? actualMax + 1 : actualMax
+
+          return { supply: resolvedSupply, startId }
+
+
+          // Support
+          async function detectStartId() {
+            try {
+              const result = await batchOwnerOfRpc(rpcUrl, contract, [0], blockTag)
+              if (hasOwner(result[0])) return 0
+            } catch { /* RPC failed, fall through to probe token ID 1 */ }
+
+            try {
+              const result = await batchOwnerOfRpc(rpcUrl, contract, [1], blockTag)
+              if (hasOwner(result[0])) return 1
+            } catch { /* RPC failed, startId remains unknown */ }
+
+            return null
+          }
+
+          async function findMaxTokenId(rpcUrl, contract, knownEnd, blockTag = 'latest', batchSize = 20) {
+            // Finds the highest owned token ID above knownEnd (burns make totalSupply() unreliable).
+            // Returns null if nothing exists above knownEnd.
+            //
+            // We can't probe one ID at a time - ownerOf() is an individual RPC call and would be
+            // too slow for large collections. Instead, batchOwnerOfRpc checks BATCH IDs per call,
+            // answering "does any token in this window have an owner?" to locate the boundary cheaply.
+            //
+            // Phase 1 - quick check (1 RPC call):
+            //   Probe the window [knownEnd+1 .. knownEnd+BATCH]. If it is empty, nothing exists
+            //   above knownEnd and we return null immediately without further calls.
+            //
+            // Phase 2 - exponential jump (1 RPC call per iteration):
+            //   Start high at knownEnd+200 and probe that window. If it has owners, advance low
+            //   to high (recording the last known-occupied position) and double the distance from
+            //   knownEnd so we leap further ahead each time. Repeat until a window is empty
+            //   (high is now a confirmed empty upper bound) or MAX_JUMP is reached.
+            //   Invariant after this phase: low has owners, high is empty.
+            //
+            // Phase 3 - binary search (1 RPC call per iteration):
+            //   [low, high] may still span thousands of IDs. Each call probes the midpoint window.
+            //   If the midpoint has owners the boundary is above it, so low advances to mid+BATCH.
+            //   If empty, the boundary is below it, so high retreats to mid.
+            //   Repeat until the gap is ≤ BINARY_THRESHOLD, small enough to scan directly.
+            //
+            // Phase 4 - linear scan (1 RPC call):
+            //   Fetch every ID in the small remaining window in one batched call. Walk the results
+            //   and track the highest ID with an owner - that is the exact answer.
+
+            const BATCH = batchSize
+            const BINARY_THRESHOLD = BATCH * 3
+            const MAX_JUMP = 100_000
+
+            if (!await quickCheck()) return null
+            const { low, high } = await findBracket()
+            const narrow = await narrowRange(low, high)
+            return exactScan(narrow.low, narrow.high)
+
+
+            // Support
+            // Phase 1 - probe the window immediately above knownEnd; bail early if empty.
+            async function quickCheck() {
+              try {
+                return await ownedAbove(knownEnd + 1)
+              } catch {
+                return false
+              }
+            }
+
+            // Phase 2 - doubles the probe distance until it hits an empty window or MAX_JUMP.
+            async function findBracket() {
+              let low = knownEnd
+              let high = knownEnd + 200
+              while (high - knownEnd <= MAX_JUMP) {
+                try {
+                  if (!await ownedAbove(high)) break
+                  low = high
+                  high += (high - knownEnd)
+                } catch {
+                  break  // treat failure as empty
+                }
+              }
+              return { low, high }
+            }
+
+            // Phase 3 - binary search to narrow [low, high] to within BINARY_THRESHOLD.
+            async function narrowRange(initialLow, initialHigh) {
+              let low = initialLow
+              let high = initialHigh
+              while (high - low > BINARY_THRESHOLD) {
+                const mid = Math.floor((low + high) / 2)
+                try {
+                  if (await ownedAbove(mid)) low = mid + BATCH
+                  else high = mid
+                } catch {
+                  high = mid  // treat failure as empty
+                }
+              }
+              return { low, high }
+            }
+
+            // Phase 4 - fetch the narrow window in one batched call and walk for the exact max.
+            async function exactScan(low, high) {
+              const scanIds = Array.from({ length: high - low + BATCH }, (_, i) => low + i)
+              try {
+                const results = await batchOwnerOfRpc(rpcUrl, contract, scanIds, blockTag)
+                let max = knownEnd
+                for (let i = 0; i < results.length; i++) {
+                  if (hasOwner(results[i])) max = scanIds[i]
+                }
+                return max > knownEnd ? max : null
+              } catch {
+                return low > knownEnd ? low : null
+              }
+            }
+
+            async function ownedAbove(start) {
+              const ids = Array.from({ length: BATCH }, (_, i) => start + i)
+              const results = await batchOwnerOfRpc(rpcUrl, contract, ids, blockTag)
+              return results.some(r => hasOwner(r))
+            }
+          }
+        }
+
+        // ----------------------------------------------------
+        // -- Scanning
+        // ----------------------------------------------------
+        const scanTokenIds = async (chain, contract, tokenIds, blockTag, callbacks) => {
+          const chainConfig = CHAIN_CONFIG[chain]
+          const concurrency = chainConfig.concurrency || 10
+          const batchSize = chainConfig.batchSize || 20
+          const scanDelayMs = chainConfig.scanDelayMs || 0
+          const total = tokenIds.length
+          let done = 0
+          let idx = 0
+
+          const worker = async () => {
+            while (idx < tokenIds.length && !callbacks.shouldStop()) {
+              const batch = tokenIds.slice(idx, idx + batchSize)
+              idx += batch.length
+
+              const results = await fetchOwnersInBatches(chain, contract, batch, blockTag, callbacks)
+              if (results) callbacks.onBatchResults(batch, results)
+              else callbacks.onBatchFailed(batch)
+
+              done += batch.length
+              callbacks.onProgress(done, total)
+
+              if (shouldThrottle()) await sleep(scanDelayMs)
+            }
+          }
+
+          await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+
+          // support
+          async function fetchOwnersInBatches(chain, contract, batch, blockTag, callbacks) {
+            for (let attempt = 1; attempt <= 5; attempt++) {
+              try {
+                return await batchOwnerOfRpc(callbacks.getActiveRpc(chain), contract, batch, blockTag)
+              } catch (e) {
+                callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt}/5 (${String(e.message || '').slice(0, 45)})`)
+                await sleep(RETRY_DELAYS_MS[attempt - 1])
+
+                if (attempt === 5) {
+                  if (callbacks.isUsingFallback()) return false
+                  if (CHAIN_CONFIG[chain].alchemyFallback === false) return false
+                  callbacks.setUsingFallback(true)
+                  callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
+                  attempt = 0
+                }
+              }
+            }
+            return null
+          }
+
+          // Throttle between batches to respect the chain's rate limit.
+          function shouldThrottle() {
+            return scanDelayMs > 0 &&
+              idx < tokenIds.length &&
+              !callbacks.shouldStop()
+          }
+        }
+
+
+        // ----------------------------------------------------
+        // -- RPC
+        // ----------------------------------------------------
+        const getActiveRpc = (chain, isUsingFallback) => {
+          if (isUsingFallback) return alchemyRpc(chain)
+          return CHAIN_CONFIG[chain].publicRpc || alchemyRpc(chain)
+        }
+
+        const batchOwnerOfRpc = async (rpc, contract, tokenIds, blockTag = 'latest') => {
+          const response = await fetch(rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tokenIds.map((tokenId, i) => buildRequest(tokenId, i))),
+            signal: AbortSignal.timeout(30000),
+          })
+
+          const entries = [await response.json()].flat().sort((a, b) => (a.id || 0) - (b.id || 0))
+          const errors = entries.filter(entry => entry?.error)
+
+          if (errors.length > 0 && errors.some(isTransient)) {
+            throw new Error(errors[0].error.message || JSON.stringify(errors[0].error))
+          }
+
+          return entries
+
+
+          // Support
+          function buildRequest(tokenId, id) {
+            return {
+              jsonrpc: '2.0',
+              id,
+              method: 'eth_call',
+              params: [{ to: contract, data: `${OWNER_OF_SIG}${tokenId.toString(16).padStart(64, '0')}` }, blockTag],
+            }
+          }
+
+          function isTransient(entry) {
+            // Returns true if an error entry is transient (rate limit, network, etc.)
+            const code = entry.error.code
+            const msg = (entry.error.message || '').toLowerCase()
+            const isRevert = code === 3 || msg.includes('revert')
+            return !isRevert
+          }
+        }
+
+        const fetchTotalSupplyRpc = async (rpcUrl, contract, blockTag) => {
+          try {
+            const response = await fetch(rpcUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'eth_call', params: [{ to: contract, data: TOTAL_SUPPLY_SIG }, blockTag] }),
+              signal: AbortSignal.timeout(10000),
+            })
+            const { result, error } = await response.json()
+            if (error) throw new Error(error.message || JSON.stringify(error))
+            if (!result || result === '0x') return null
+
+            const parsed = parseInt(result, 16)
+            return parsed > 0 && parsed < 10_000_000 ? parsed : null
+          } catch {
+            return null  // contract doesn't implement totalSupply(), or RPC failed
+          }
+        }
+
+        // ----------------------------------------------------
+        // -- Support
+        // ----------------------------------------------------
+
+        // Owners
+        const decodeOwner = (hexResult) => {
+          const isValid = hexResult && hexResult !== '0x' && hexResult.length >= 66
+          if (!isValid) return null
+          return `0x${hexResult.slice(-40).toLowerCase()}`
+        }
+
+        const hasOwner = (resp) => {
+          if (!resp || resp.error) return false
+
+          const owner = decodeOwner(resp.result)
+          if (!owner) return false
+          return owner !== ZERO_ADDR
+        }
+
+        // Status
         const showStatus = (message, type) => {
           statusState.message = message
           statusState.type = type
@@ -734,449 +1284,47 @@
           statusState.type = ''
         }
 
-        // ── RPC Layer ──
-        const getActiveRpc = (chain, usingFallback) => {
-          const cfg = CHAIN_REGISTRY[chain]
-          return usingFallback ? alchemyRpc(chain) : cfg.publicRpc || alchemyRpc(chain)
-        }
+        // Logging
+        const log = (type = 'info', message = '') => {
+          const box = logBoxRef.value
+          const isScrolledToBottom = !box || box.scrollTop + box.clientHeight >= box.scrollHeight - 24
 
-        const rpcCall = async (rpc, method, params, timeout = 15000) => {
-          const res = await fetch(rpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-            signal: AbortSignal.timeout(timeout),
-          })
-          const json = await res.json()
-          if (json.error) throw new Error(json.error.message || JSON.stringify(json.error))
-          return json.result
-        }
+          scanState.logs.push({ time: new Date().toLocaleTimeString(), message, type })
 
-        const batchOwnerOf = async (rpc, contract, tokenIds, blockTag = 'latest') => {
-          const requests = tokenIds.map((tokenId, i) => ({
-            jsonrpc: '2.0',
-            id: i,
-            method: 'eth_call',
-            params: [{ to: contract, data: `${OWNER_OF_SIG}${tokenId.toString(16).padStart(64, '0')}` }, blockTag],
-          }))
-          const res = await fetch(rpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requests),
-            signal: AbortSignal.timeout(30000),
-          })
-          const data = await res.json()
-          const entries = Array(data).flat().sort((a, b) => (a.id || 0) - (b.id || 0))
-          const errors = entries.filter(entry => entry && entry.error)
-          if (errors.length > 0) {
-            const hasTransientError = errors.some(entry => {
-              const code = entry.error.code
-              const msg = (entry.error.message || '').toLowerCase()
-              const isRevert = code === 3 || msg.includes('revert')
-              return !isRevert
+          if (isScrolledToBottom) {
+            Vue.nextTick(() => {
+              if (logBoxRef.value) logBoxRef.value.scrollTop = logBoxRef.value.scrollHeight
             })
-            if (hasTransientError) {
-              throw new Error(errors[0].error.message || JSON.stringify(errors[0].error))
-            }
           }
-          return entries
         }
 
-        const decodeOwner = (hexResult) => {
-          if (!hexResult || hexResult === '0x' || hexResult.length < 66) return null
-          return `0x${hexResult.slice(-40).toLowerCase()}`
-        }
-
-        const hasOwner = (resp) => {
-          const owner = resp && !resp.error ? decodeOwner(resp.result) : null
-          return owner && owner !== ZERO_ADDR
-        }
-
-        // ── Token Range Detection ──
-        // Finds the highest owned token ID above knownEnd (burns make totalSupply() unreliable).
-        // Uses a 4-phase strategy: quick check → exponential jump → binary search → linear scan.
-        const findMaxTokenId = async (rpcUrl, contract, knownEnd, blockTag = 'latest') => {
-          const BATCH = 20
-          const BINARY_THRESHOLD = BATCH * 3
-          const MAX_JUMP = 100_000
-
-          const ownedAbove = async (start) => {
-            const ids = Array.from({ length: BATCH }, (_, i) => start + i)
-            const results = await batchOwnerOf(rpcUrl, contract, ids, blockTag)
-            return results.some(r => hasOwner(r))
-          }
-
-          // Phase 1 — quick check
-          try { if (!await ownedAbove(knownEnd + 1)) return null }
-          catch { return null }
-
-          // Phase 2 — exponential jump to find [low, high] where low has owners, high is empty
-          let low = knownEnd
-          let high = knownEnd + 200
-          while (high - knownEnd <= MAX_JUMP) {
-            try {
-              if (!await ownedAbove(high)) break
-              low = high
-              high += (high - knownEnd)
-            } catch { break }
-          }
-
-          // Phase 3 — binary search to narrow [low, high] to BINARY_THRESHOLD
-          while (high - low > BINARY_THRESHOLD) {
-            const mid = Math.floor((low + high) / 2)
-            try {
-              if (await ownedAbove(mid)) low = mid + BATCH
-              else high = mid
-            } catch { high = mid }
-          }
-
-          // Phase 4 — linear scan of the narrow window for the exact highest owned token ID
-          const scanIds = Array.from({ length: high - low + BATCH }, (_, i) => low + i)
-          try {
-            const results = await batchOwnerOf(rpcUrl, contract, scanIds, blockTag)
-            let max = knownEnd
-            for (let i = 0; i < results.length; i++) {
-              if (hasOwner(results[i])) max = scanIds[i]
-            }
-            return max > knownEnd ? max : null
-          } catch { return low > knownEnd ? low : null }
-        }
-
-        const detectTokenRange = async (rpcUrl, contract, blockTag = 'latest') => {
-          let supply = null
-          try {
-            const result = await rpcCall(rpcUrl, 'eth_call',
-              [{ to: contract, data: TOTAL_SUPPLY_SIG }, blockTag], 10000)
-            if (result && result !== '0x') {
-              const parsed = parseInt(result, 16)
-              if (parsed > 0 && parsed < 10000000) supply = parsed
-            }
-          } catch (_) { }
-
-          let startId = null
-          try {
-            const result = await batchOwnerOf(rpcUrl, contract, [0], blockTag)
-            if (hasOwner(result[0])) startId = 0
-          } catch (_) { }
-
-          if (startId === null) {
-            try {
-              const result = await batchOwnerOf(rpcUrl, contract, [1], blockTag)
-              if (hasOwner(result[0])) startId = 1
-            } catch (_) { }
-          }
-
-          if (supply !== null) {
-            const estimatedEnd = startId === 0 ? supply - 1 : supply
-            const actualMax = await findMaxTokenId(rpcUrl, contract, estimatedEnd, blockTag)
-            if (actualMax !== null) supply = startId === 0 ? actualMax + 1 : actualMax
-          }
-
-          return { supply, startId }
-        }
-
-        // ── Scanning Engine ──
-        const fetchBatchWithRetry = async (chain, contract, batch, blockTag, hooks) => {
-          for (let attempt = 0; attempt < 5; attempt++) {
-            try {
-              return await batchOwnerOf(hooks.getActiveRpc(chain), contract, batch, blockTag)
-            } catch (e) {
-              if (!hooks.isUsingFallback() && attempt === 0 && CHAIN_REGISTRY[chain].alchemyFallback !== false) {
-                hooks.setUsingFallback(true)
-                hooks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
-                try {
-                  return await batchOwnerOf(alchemyRpc(chain), contract, batch, blockTag)
-                } catch (_) { }
-              }
-
-              if (attempt < 4) {
-                hooks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt + 1}/4 (${String(e.message || '').slice(0, 45)})`)
-                await sleep(RETRY_DELAYS_MS[attempt])
-              }
-            }
-          }
-          return null
-        }
-
-        const scanTokenIds = async (chain, contract, tokenIds, blockTag, hooks) => {
-          const chainCfg = CHAIN_REGISTRY[chain]
-          const concurrency = chainCfg.concurrency || 10
-          const batchSize = chainCfg.batchSize || 20
-          const scanDelayMs = chainCfg.scanDelayMs || 0
-          const total = tokenIds.length
-          let done = 0
-          let idx = 0
-
-          const worker = async () => {
-            while (idx < tokenIds.length && !hooks.shouldStop()) {
-              const batch = tokenIds.slice(idx, idx + batchSize)
-              idx += batch.length
-
-              const results = await fetchBatchWithRetry(chain, contract, batch, blockTag, hooks)
-              if (results) hooks.onBatchResults(batch, results)
-              else hooks.onBatchFailed(batch)
-
-              done += batch.length
-              hooks.onProgress(done, total)
-
-              if (scanDelayMs > 0 && idx < tokenIds.length && !hooks.shouldStop()) {
-                await sleep(scanDelayMs)
-              }
-            }
-          }
-
-          await Promise.all(Array.from({ length: concurrency }, () => worker()))
-        }
-
-        // ── Input Parsing ──
-        const parseAddressWithChain = (addressString, defaultChain) => {
-          const parts = addressString.trim().split(':')
-          if (parts.length === 2) {
-            const prefix = parts[0].trim().toLowerCase()
-            const address = parts[1].trim()
-            if (chainPrefixMap[prefix]) {
-              return { chain: chainPrefixMap[prefix], address, displayName: `${prefix}:${address}` }
-            }
-          }
-          return { chain: defaultChain, address: addressString.trim(), displayName: addressString.trim() }
-        }
-
-        // ── Multi-Collection Orchestrator ──
-        const startScan = async () => {
-          if (scanState.scanning) return
-          scanState.scanning = true
-          scanState.cancelled = false
-          scanState.cancelling = false
-          hideStatus()
-
-          const rawLines = formState.collectionAddresses.trim().split('\n').filter(a => a.trim())
-          if (!rawLines.length) {
-            showStatus('Please enter at least one collection address.', 'error')
-            scanState.scanning = false
-            return
-          }
-
-          // Validate and parse
-          const collections = []
-          for (const raw of rawLines) {
-            const parsed = parseAddressWithChain(raw, formState.chain)
-            if (!/^0x[0-9a-fA-F]{40}$/.test(parsed.address)) {
-              // Will log warning after state is set up
-              collections.push({ ...parsed, invalid: true })
-            } else {
-              collections.push(parsed)
-            }
-          }
-
-          const valid = collections.filter(c => !c.invalid)
-          if (!valid.length) {
-            showStatus('No valid addresses found.', 'error')
-            scanState.scanning = false
-            return
-          }
-
-          // Resolve block tag for default chain
-          const userBlockNumber = formState.blockNumber.trim()
-          const hasBlockNumber = userBlockNumber !== ''
-          const blockTagForDefaultChain = hasBlockNumber
-            ? '0x' + parseInt(userBlockNumber, 10).toString(16)
-            : 'latest'
-
-          // Reset cumulative state
-          scanState.globalWalletMap = {}
-          scanState.totalFailedIds = 0
-          scanState.totalTokensFound = 0
-          scanState.totalTokensQueried = 0
-          scanState.totalTokensToScan = 0
+        const clearLog = () => {
           scanState.logs = []
-          scanState.collectionStatuses = valid.map(c => ({ displayName: c.displayName, status: 'pending' }))
-          scanState.currentCollectionIndex = -1
-          scanState.collectionProgressPercent = 0
-          scanState.collectionProgressLabel = '\u2014'
-          scanState.failedInfo = ''
-          scanState.showProgress = true
-          scanState.showStats = true
-          scanState.showLog = true
-
-          const t0 = Date.now()
-
-          // Log invalid addresses now that log is visible
-          for (const c of collections) {
-            if (c.invalid) log('warning', `Skipping invalid address: ${c.displayName}`)
-          }
-
-          log('info', `Starting scan of ${valid.length} collection(s)...`)
-          if (hasBlockNumber) {
-            log('info', `Block number: ${userBlockNumber} (applied to ${CHAIN_REGISTRY[formState.chain].label} collections only)`)
-          }
-
-          try {
-            for (let ci = 0; ci < valid.length; ci++) {
-              if (scanState.cancelled) {
-                if (scanState.collectionStatuses[ci]) {
-                  scanState.collectionStatuses[ci].status = 'cancelled'
-                }
-                log('warning', 'Scan cancelled by user.')
-                break
-              }
-
-              const { chain, address, displayName } = valid[ci]
-              const chainCfg = CHAIN_REGISTRY[chain]
-              let usingFallback = !chainCfg.publicRpc
-
-              // Resolve block tag for this collection
-              let blockTag = 'latest'
-              if (hasBlockNumber && chain === formState.chain) {
-                blockTag = blockTagForDefaultChain
-              } else if (hasBlockNumber && chain !== formState.chain) {
-                log('warning', `Block number ignored for ${displayName} \u2014 block numbers are chain-specific.`)
-              }
-
-              scanState.collectionStatuses[ci].status = 'detecting'
-              scanState.currentCollectionIndex = ci
-              scanState.collectionProgressPercent = 0
-              scanState.collectionProgressLabel = 'Detecting token range...'
-              const collectionT0 = Date.now()
-
-              log('info', `\u2500\u2500 Collection ${ci + 1}/${valid.length}: ${displayName} \u2500\u2500`)
-              log('info', `Chain: ${chainCfg.label} | RPC: ${usingFallback ? 'Alchemy' : 'public'}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
-
-              // Detect token range
-              let detected
-              try {
-                detected = await detectTokenRange(getActiveRpc(chain, usingFallback), address, blockTag)
-              } catch (e) {
-                log('error', `Range detection failed: ${String(e.message || '').slice(0, 60)}`)
-              }
-
-              // Alchemy fallback for detection
-              if (!usingFallback && (!detected || (detected.supply === null && detected.startId === null)) && chainCfg.alchemyFallback !== false) {
-                try {
-                  detected = await detectTokenRange(alchemyRpc(chain), address, blockTag)
-                  if (detected && (detected.supply !== null || detected.startId !== null)) {
-                    usingFallback = true
-                    log('warning', 'Public RPC detection failed, switched to Alchemy fallback.')
-                  }
-                } catch (_) { }
-              }
-
-              if (!detected || detected.startId === null) {
-                scanState.collectionStatuses[ci].status = 'skipped'
-                log('error', `Could not detect start ID for ${displayName}. Skipping.`)
-                continue
-              }
-              if (detected.supply === null) {
-                scanState.collectionStatuses[ci].status = 'skipped'
-                log('error', `Could not detect supply for ${displayName}. Skipping.`)
-                continue
-              }
-
-              const tokenStart = detected.startId
-              const tokenEnd = detected.startId === 0 ? detected.supply - 1 : detected.supply
-
-              log('info', `Token range: ${tokenStart} \u2192 ${tokenEnd} (${(tokenEnd - tokenStart + 1).toLocaleString()} tokens)`)
-
-              const allIds = Array.from({ length: tokenEnd - tokenStart + 1 }, (_, i) => tokenStart + i)
-              scanState.totalTokensToScan += allIds.length
-
-              let collectionFailed = 0
-              let collectionFound = 0
-
-              scanState.collectionStatuses[ci].status = 'scanning'
-              await scanTokenIds(chain, address.toLowerCase(), allIds, blockTag, {
-                shouldStop: () => scanState.cancelled,
-                getActiveRpc: (ch) => getActiveRpc(ch, usingFallback),
-                isUsingFallback: () => usingFallback,
-                setUsingFallback: (v) => { usingFallback = v },
-                log,
-                onBatchFailed: (batch) => {
-                  collectionFailed += batch.length
-                  scanState.totalFailedIds += batch.length
-                  scanState.totalTokensQueried += batch.length
-                  log('error', `Batch ${batch[0]}-${batch[batch.length - 1]}: failed after 5 retries`)
-                },
-                onBatchResults: (batch, results) => {
-                  let found = 0
-                  for (let i = 0; i < batch.length; i++) {
-                    const entry = i < results.length ? results[i] : null
-                    if (!entry || entry.error || !entry.result || entry.result === '0x') {
-                      collectionFailed++
-                      scanState.totalFailedIds++
-                      continue
-                    }
-                    const owner = decodeOwner(entry.result)
-                    if (owner && owner !== ZERO_ADDR) {
-                      scanState.globalWalletMap[owner] = (scanState.globalWalletMap[owner] || 0) + 1
-                      collectionFound++
-                      scanState.totalTokensFound++
-                      found++
-                    } else {
-                      collectionFailed++
-                      scanState.totalFailedIds++
-                    }
-                  }
-                  scanState.totalTokensQueried += batch.length
-                  if (found > 0) log('ok', `Token IDs ${batch[0]}-${batch[batch.length - 1]}: ${found} owner(s) found`)
-                },
-                onProgress: (done, total) => {
-                  const pct = total > 0 ? Math.round((done / total) * 100) : 0
-                  const elapsed = (Date.now() - collectionT0) / 1000
-                  const rate = done / Math.max(elapsed, 0.1)
-                  const eta = rate > 0 ? Math.round((total - done) / rate) : null
-                  const etaText = eta !== null ? ` \u00b7 ~${fmtTime(eta)} remaining` : ''
-                  scanState.collectionProgressPercent = pct
-                  scanState.collectionProgressLabel = `${pct}% \u00b7 ${done.toLocaleString()}/${total.toLocaleString()} tokens queried${etaText}`
-                },
-              })
-
-              scanState.collectionStatuses[ci].status = 'done'
-              log('info', `Collection done: ${collectionFound} token(s) found, ${collectionFailed} failed/burned`)
-            }
-
-            // Failed info
-            if (scanState.totalFailedIds > 0) {
-              scanState.failedInfo = `${scanState.totalFailedIds} token IDs returned no owner across all collections (not yet minted, burned, or RPC error).`
-            }
-
-            // Generate and download CSV
-            const walletMap = scanState.globalWalletMap
-            const wallets = Object.keys(walletMap)
-
-            if (scanState.cancelled) {
-              log('warning', 'Scan cancelled. No file downloaded.')
-            } else {
-              let csvContent
-              if (formState.includeBalance) {
-                csvContent = wallets.map(addr => `${addr},${walletMap[addr]}`).join('\n')
-              } else {
-                csvContent = wallets.join('\n')
-              }
-              const blob = new Blob([csvContent], { type: 'text/plain' })
-              saveAs(blob, `output-${Date.now()}.txt`)
-
-              const elapsed = Math.round((Date.now() - t0) / 1000)
-              log('ok', `\u2500\u2500 Complete! ${wallets.length} unique holder(s) across all collections (${fmtTime(elapsed)}) \u2500\u2500`)
-              scanState.collectionProgressPercent = 100
-              scanState.collectionProgressLabel = `100% \u00b7 Done in ${fmtTime(elapsed)}`
-            }
-
-          } catch (e) {
-            showStatus(String(e.message || 'Scan failed.'), 'error')
-            log('error', `ERROR: ${String(e.message || 'Scan failed.')}`)
-          } finally {
-            scanState.scanning = false
-            scanState.cancelling = false
-          }
         }
 
-        const cancelScan = () => { scanState.cancelled = true; scanState.cancelling = true }
-        const clearLog = () => { scanState.logs = [] }
+        // Utils
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+
+        const formatTime = (s) => {
+          if (s < 60) return `${s}s`
+          if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+          return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+        }
+
+        const alchemyRpc = (chain) => `https://${chain}.g.alchemy.com/v2/${ALCHEMY_KEY}`
+
 
         return {
-          CHAIN_REGISTRY, chainOrder,
-          formState, scanState, statusState,
-          logBoxRef, stats,
-          startScan, cancelScan, clearLog,
+          CHAIN_CONFIG,
+          chainOrder,
+          formState,
+          scanState,
+          statusState,
+          logBoxRef,
+          stats,
+          startScan,
+          cancelScan,
+          clearLog,
         }
       }
     })
