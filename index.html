@@ -504,7 +504,7 @@
       <label for="chain-select">Default Chain (when no chain prefix is provided)</label>
       <select id="chain-select" v-model="formState.chain" :disabled="scanState.scanning">
         <option v-for="chainKey in chainOrder" :key="chainKey" :value="chainKey">
-          {{ CHAIN_REGISTRY[chainKey].label }}
+          {{ CHAIN_CONFIG[chainKey].label }}
         </option>
       </select>
     </div>
@@ -626,7 +626,7 @@
         const ALCHEMY_KEY = 'tPWqgHC6-1dU8Y9Wdc-50dRrcc4nhsIh'
         const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
 
-        const CHAIN_REGISTRY = {
+        const CHAIN_CONFIG = {
           'eth-mainnet':          { label: 'Ethereum',      explorer: 'https://etherscan.io',             publicRpc: 'https://eth.drpc.org',             batchSize: 3 },
           'base-mainnet':         { label: 'Base',          explorer: 'https://basescan.org',             publicRpc: 'https://base.drpc.org',            batchSize: 3 },
           'arb-mainnet':          { label: 'Arbitrum',      explorer: 'https://arbiscan.io',              publicRpc: 'https://arbitrum.drpc.org',        batchSize: 3 },
@@ -656,7 +656,7 @@
           'megaeth':      'megaeth-mainnet',
         }
 
-        const chainOrder = Object.keys(CHAIN_REGISTRY)
+        const chainOrder = Object.keys(CHAIN_CONFIG)
 
         // ----------------------------------------------------
         // -- Refs
@@ -713,7 +713,6 @@
         // ----------------------------------------------------
         // -- Multi-Collection Orchestrator
         // ----------------------------------------------------
-
         const startScan = async () => {
           // Orchestrates a full snapshot scan across one or more ERC-721 collections.
           //
@@ -750,17 +749,17 @@
             scanState.scanning = false
             return
           }
-          const { collections, valid } = parsed
+          const { collections, validCollections } = parsed
           const userBlockNumber = formState.blockNumber.trim()
           const hasBlockNumber = userBlockNumber !== ''
           const blockTagForDefaultChain = hasBlockNumber
             ? '0x' + parseInt(userBlockNumber, 10).toString(16)
             : 'latest'
 
-          const t0 = Date.now()
+          const startTime = Date.now()
           let collectionFailed = 0
           let collectionFound = 0
-          let collectionT0 = Date.now()
+          let collectionStartTime = Date.now()
 
           // Reset scan state
           scanState.globalWalletMap = {}
@@ -769,7 +768,7 @@
           scanState.totalTokensQueried = 0
           scanState.totalTokensToScan = 0
           scanState.logs = []
-          scanState.collectionStatuses = valid.map(c => ({ displayName: c.displayName, status: 'pending' }))
+          scanState.collectionStatuses = validCollections.map(c => ({ displayName: c.displayName, status: 'pending' }))
           scanState.currentCollectionIndex = -1
           scanState.collectionProgressPercent = 0
           scanState.collectionProgressLabel = '\u2014'
@@ -784,59 +783,59 @@
             if (collection.invalid) log('warning', `Skipping invalid address: ${collection.displayName}`)
           }
 
-          log('info', `Starting scan of ${valid.length} collection(s)...`)
+          log('info', `Starting scan of ${validCollections.length} collection(s)...`)
           if (hasBlockNumber) {
-            log('info', `Block number: ${userBlockNumber} (applied to ${CHAIN_REGISTRY[formState.chain].label} collections only)`)
+            log('info', `Block number: ${userBlockNumber} (applied to ${CHAIN_CONFIG[formState.chain].label} collections only)`)
           }
 
           try {
-            for (let ci = 0; ci < valid.length; ci++) {
+            for (let collectionIndex = 0; collectionIndex < validCollections.length; collectionIndex++) {
               if (scanState.cancelled) {
-                if (scanState.collectionStatuses[ci]) scanState.collectionStatuses[ci].status = 'cancelled'
+                if (scanState.collectionStatuses[collectionIndex]) scanState.collectionStatuses[collectionIndex].status = 'cancelled'
                 log('warning', 'Scan cancelled by user.')
                 break
               }
 
-              const { chain, address, displayName } = valid[ci]
-              const chainConfig = CHAIN_REGISTRY[chain]
+              const { chain, address, displayName } = validCollections[collectionIndex]
+              const chainConfig = CHAIN_CONFIG[chain]
               let usingFallback = !chainConfig.publicRpc
               const blockTag = resolveBlockTag(chain, displayName)
 
-              scanState.collectionStatuses[ci].status = 'detecting'
-              scanState.currentCollectionIndex = ci
+              scanState.collectionStatuses[collectionIndex].status = 'detecting'
+              scanState.currentCollectionIndex = collectionIndex
               scanState.collectionProgressPercent = 0
               scanState.collectionProgressLabel = 'Detecting token range...'
-              collectionT0 = Date.now()
+              collectionStartTime = Date.now()
               collectionFailed = 0
               collectionFound = 0
 
-              log('info', `\u2500\u2500 Collection ${ci + 1}/${valid.length}: ${displayName} \u2500\u2500`)
+              log('info', `\u2500\u2500 Collection ${collectionIndex + 1}/${validCollections.length}: ${displayName} \u2500\u2500`)
               log('info', `Chain: ${chainConfig.label} | RPC: ${usingFallback ? 'Alchemy' : 'public'}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
 
               const rangeResult = await detectRangeWithFallback(chain, address, blockTag, usingFallback)
-              const detected = rangeResult.detected
+              const detectedRange = rangeResult.detected
               usingFallback = rangeResult.usingFallback
 
-              if (!detected || detected.startId === null) {
-                scanState.collectionStatuses[ci].status = 'skipped'
+              if (!detectedRange || detectedRange.startId === null) {
+                scanState.collectionStatuses[collectionIndex].status = 'skipped'
                 log('error', `Could not detect start ID for ${displayName}. Skipping.`)
                 continue
               }
 
-              if (detected.supply === null) {
-                scanState.collectionStatuses[ci].status = 'skipped'
+              if (detectedRange.supply === null) {
+                scanState.collectionStatuses[collectionIndex].status = 'skipped'
                 log('error', `Could not detect supply for ${displayName}. Skipping.`)
                 continue
               }
 
-              const tokenStart = detected.startId
-              const tokenEnd = detected.startId === 0 ? detected.supply - 1 : detected.supply
+              const tokenStart = detectedRange.startId
+              const tokenEnd = detectedRange.startId === 0 ? detectedRange.supply - 1 : detectedRange.supply
               const allIds = Array.from({ length: tokenEnd - tokenStart + 1 }, (_, i) => tokenStart + i)
 
               log('info', `Token range: ${tokenStart} \u2192 ${tokenEnd} (${allIds.length.toLocaleString()} tokens)`)
               scanState.totalTokensToScan += allIds.length
 
-              scanState.collectionStatuses[ci].status = 'scanning'
+              scanState.collectionStatuses[collectionIndex].status = 'scanning'
               await scanTokenIds(chain, address.toLowerCase(), allIds, blockTag, {
                 shouldStop: () => scanState.cancelled,
                 getActiveRpc: (ch) => getActiveRpc(ch, usingFallback),
@@ -848,7 +847,7 @@
                 onProgress: updateProgress,
               })
 
-              scanState.collectionStatuses[ci].status = 'done'
+              scanState.collectionStatuses[collectionIndex].status = 'done'
               log('info', `Collection done: ${collectionFound} token(s) found, ${collectionFailed} failed/burned`)
             }
 
@@ -918,7 +917,7 @@
             }
 
             const detectionFailed = !detected || (detected.supply === null && detected.startId === null)
-            if (!usingFallback && detectionFailed && CHAIN_REGISTRY[chain].alchemyFallback !== false) {
+            if (!usingFallback && detectionFailed && CHAIN_CONFIG[chain].alchemyFallback !== false) {
               try {
                 detected = await detectTokenRange(alchemyRpc(chain), address, blockTag)
               } catch { /* fallback also failed; detected stays as-is */ }
@@ -956,7 +955,7 @@
 
           function updateProgress(done, total) {
             const pct = total > 0 ? Math.round((done / total) * 100) : 0
-            const elapsed = (Date.now() - collectionT0) / 1000
+            const elapsed = (Date.now() - collectionStartTime) / 1000
             const rate = done / Math.max(elapsed, 0.1)
             const eta = rate > 0 ? Math.round((total - done) / rate) : null
             const etaText = eta !== null ? ` \u00b7 ~${formatTime(eta)} remaining` : ''
@@ -977,7 +976,7 @@
             const blob = new Blob([csvContent], { type: 'text/plain' })
             saveAs(blob, `output-${Date.now()}.txt`)
 
-            const elapsed = Math.round((Date.now() - t0) / 1000)
+            const elapsed = Math.round((Date.now() - startTime) / 1000)
             log('ok', `\u2500\u2500 Complete! ${wallets.length} unique holder(s) across all collections (${formatTime(elapsed)}) \u2500\u2500`)
             scanState.collectionProgressPercent = 100
             scanState.collectionProgressLabel = `100% \u00b7 Done in ${formatTime(elapsed)}`
@@ -995,7 +994,7 @@
         // ----------------------------------------------------
         const getActiveRpc = (chain, usingFallback) => {
           if (usingFallback) return alchemyRpc(chain)
-          return CHAIN_REGISTRY[chain].publicRpc || alchemyRpc(chain)
+          return CHAIN_CONFIG[chain].publicRpc || alchemyRpc(chain)
         }
 
         const batchOwnerOf = async (rpc, contract, tokenIds, blockTag = 'latest') => {
@@ -1215,7 +1214,7 @@
         // ----------------------------------------------------
 
         const scanTokenIds = async (chain, contract, tokenIds, blockTag, callbacks) => {
-          const chainConfig = CHAIN_REGISTRY[chain]
+          const chainConfig = CHAIN_CONFIG[chain]
           const concurrency = chainConfig.concurrency || 10
           const batchSize = chainConfig.batchSize || 20
           const scanDelayMs = chainConfig.scanDelayMs || 0
@@ -1259,7 +1258,7 @@
 
               if (attempt === 3) {
                 if (callbacks.isUsingFallback()) return false
-                if (CHAIN_REGISTRY[chain].alchemyFallback === false) return false
+                if (CHAIN_CONFIG[chain].alchemyFallback === false) return false
                 callbacks.setUsingFallback(true)
                 callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
               }
@@ -1332,7 +1331,7 @@
 
 
         return {
-          CHAIN_REGISTRY,
+          CHAIN_CONFIG,
           chainOrder,
           formState,
           scanState,
