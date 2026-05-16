@@ -1160,19 +1160,19 @@
 
           // support
           async function fetchOwnersInBatches(chain, contract, batch, blockTag, callbacks) {
-            for (let attempt = 0; attempt < 5; attempt++) {
+            for (let attempt = 1; attempt <= 5; attempt++) {
               try {
                 return await batchOwnerOfRpc(callbacks.getActiveRpc(chain), contract, batch, blockTag)
               } catch (e) {
-                callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt + 1}/4 (${String(e.message || '').slice(0, 45)})`)
-                await sleep(RETRY_DELAYS_MS[attempt])
+                callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt}/5 (${String(e.message || '').slice(0, 45)})`)
+                await sleep(RETRY_DELAYS_MS[attempt - 1])
 
-                if (attempt === 4) {
+                if (attempt === 5) {
                   if (callbacks.isUsingFallback()) return false
                   if (CHAIN_CONFIG[chain].alchemyFallback === false) return false
                   callbacks.setUsingFallback(true)
                   callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
-                  attempt = -1  // reset so fallback gets a full set of retries
+                  attempt = 0
                 }
               }
             }
