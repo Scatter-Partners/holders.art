@@ -752,9 +752,7 @@
           const { collections, validCollections } = parsed
           const userBlockNumber = formState.blockNumber.trim()
           const hasBlockNumber = userBlockNumber !== ''
-          const blockTagForDefaultChain = hasBlockNumber
-            ? '0x' + parseInt(userBlockNumber, 10).toString(16)
-            : 'latest'
+          const blockTagForDefaultChain = hasBlockNumber ? '0x' + parseInt(userBlockNumber, 10).toString(16) : 'latest'
 
           const startTime = Date.now()
           let collectionFailed = 0
@@ -810,7 +808,7 @@
               collectionFound = 0
 
               log('info', `\u2500\u2500 Collection ${collectionIndex + 1}/${validCollections.length}: ${displayName} \u2500\u2500`)
-              log('info', `Chain: ${chainConfig.label} | RPC: ${isUsingFallback ? 'Alchemy' : 'public'}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
+              log('info', `Chain: ${chainConfig.label} | RPC: ${isUsingFallback ? 'Alchemy' : chainConfig.publicRpc}${blockTag !== 'latest' ? ` | Block: ${userBlockNumber}` : ''}`)
 
               const detectedRange = await detectRange(chain, address, blockTag, isUsingFallback)
 
@@ -878,13 +876,13 @@
               return ETH_ADDRESS_RE.test(parsed.address) ? parsed : { ...parsed, invalid: true }
             })
 
-            const valid = collections.filter(c => !c.invalid)
-            if (!valid.length) {
+            const validCollections = collections.filter(c => !c.invalid)
+            if (!validCollections.length) {
               showStatus('No valid addresses found.', 'error')
               return null
             }
 
-            return { collections, valid }
+            return { collections, validCollections }
 
             function parseAddress(addressString) {
               const parts = addressString.trim().split(':')
@@ -907,18 +905,19 @@
           }
 
           async function detectRange(chain, address, blockTag, isUsingFallback) {
+            const batchSize = CHAIN_CONFIG[chain].batchSize || 20
             let detected
             try {
-              detected = await detectTokenRange(getActiveRpc(chain, isUsingFallback), address, blockTag)
+              detected = await detectTokenRange(getActiveRpc(chain, isUsingFallback), address, blockTag, batchSize)
             } catch (e) {
               log('error', `Range detection failed: ${String(e.message || '').slice(0, 60)}`)
             }
 
-            const noRangeDetected = !detected || (detected.supply === null && detected.startId === null)
+            const noRangeDetected = !detected || detected.supply === null || detected.startId === null
             const alchemyFallbackEnabled = CHAIN_CONFIG[chain].alchemyFallback !== false
             if (!isUsingFallback && noRangeDetected && alchemyFallbackEnabled) {
               try {
-                detected = await detectTokenRange(alchemyRpc(chain), address, blockTag)
+                detected = await detectTokenRange(alchemyRpc(chain), address, blockTag, batchSize)
               } catch { /* fallback also failed; detected stays as-is */ }
             }
 
@@ -987,6 +986,207 @@
           scanState.cancelling = true
         }
 
+        // ----------------------------------------------------
+        // -- Token Range Detection
+        // ----------------------------------------------------
+        const detectTokenRange = async (rpcUrl, contract, blockTag = 'latest', batchSize = 20) => {
+          // Detects the token ID range for an ERC-721 contract.
+          // Returns { supply, startId } where:
+          //   startId - 0 or 1 depending on where the collection starts; null if undetectable.
+          //   supply  - exclusive upper bound of the ID range. Null if totalSupply() is unavailable.
+
+          const supply = await fetchTotalSupplyRpc(rpcUrl, contract, blockTag)
+          const startId = await detectStartId()
+          if (supply === null) return { supply: null, startId }
+
+
+          const estimatedEnd = startId === 0 ? supply - 1 : supply
+          const actualMax = await findMaxTokenId(rpcUrl, contract, estimatedEnd, blockTag, batchSize)
+          if (actualMax === null) return { supply, startId }
+          const resolvedSupply = startId === 0 ? actualMax + 1 : actualMax
+
+          return { supply: resolvedSupply, startId }
+
+
+          // Support
+          async function detectStartId() {
+            try {
+              const result = await batchOwnerOfRpc(rpcUrl, contract, [0], blockTag)
+              if (hasOwner(result[0])) return 0
+            } catch { /* RPC failed, fall through to probe token ID 1 */ }
+
+            try {
+              const result = await batchOwnerOfRpc(rpcUrl, contract, [1], blockTag)
+              if (hasOwner(result[0])) return 1
+            } catch { /* RPC failed, startId remains unknown */ }
+
+            return null
+          }
+
+          async function findMaxTokenId(rpcUrl, contract, knownEnd, blockTag = 'latest', batchSize = 20) {
+            // Finds the highest owned token ID above knownEnd (burns make totalSupply() unreliable).
+            // Returns null if nothing exists above knownEnd.
+            //
+            // We can't probe one ID at a time - ownerOf() is an individual RPC call and would be
+            // too slow for large collections. Instead, batchOwnerOfRpc checks BATCH IDs per call,
+            // answering "does any token in this window have an owner?" to locate the boundary cheaply.
+            //
+            // Phase 1 - quick check (1 RPC call):
+            //   Probe the window [knownEnd+1 .. knownEnd+BATCH]. If it is empty, nothing exists
+            //   above knownEnd and we return null immediately without further calls.
+            //
+            // Phase 2 - exponential jump (1 RPC call per iteration):
+            //   Start high at knownEnd+200 and probe that window. If it has owners, advance low
+            //   to high (recording the last known-occupied position) and double the distance from
+            //   knownEnd so we leap further ahead each time. Repeat until a window is empty
+            //   (high is now a confirmed empty upper bound) or MAX_JUMP is reached.
+            //   Invariant after this phase: low has owners, high is empty.
+            //
+            // Phase 3 - binary search (1 RPC call per iteration):
+            //   [low, high] may still span thousands of IDs. Each call probes the midpoint window.
+            //   If the midpoint has owners the boundary is above it, so low advances to mid+BATCH.
+            //   If empty, the boundary is below it, so high retreats to mid.
+            //   Repeat until the gap is ≤ BINARY_THRESHOLD, small enough to scan directly.
+            //
+            // Phase 4 - linear scan (1 RPC call):
+            //   Fetch every ID in the small remaining window in one batched call. Walk the results
+            //   and track the highest ID with an owner - that is the exact answer.
+
+            const BATCH = batchSize
+            const BINARY_THRESHOLD = BATCH * 3
+            const MAX_JUMP = 100_000
+
+            if (!await quickCheck()) return null
+            const { low, high } = await findBracket()
+            const narrow = await narrowRange(low, high)
+            return exactScan(narrow.low, narrow.high)
+
+
+            // Support
+            // Phase 1 - probe the window immediately above knownEnd; bail early if empty.
+            async function quickCheck() {
+              try {
+                return await ownedAbove(knownEnd + 1)
+              } catch {
+                return false
+              }
+            }
+
+            // Phase 2 - doubles the probe distance until it hits an empty window or MAX_JUMP.
+            async function findBracket() {
+              let low = knownEnd
+              let high = knownEnd + 200
+              while (high - knownEnd <= MAX_JUMP) {
+                try {
+                  if (!await ownedAbove(high)) break
+                  low = high
+                  high += (high - knownEnd)
+                } catch {
+                  break  // treat failure as empty
+                }
+              }
+              return { low, high }
+            }
+
+            // Phase 3 - binary search to narrow [low, high] to within BINARY_THRESHOLD.
+            async function narrowRange(initialLow, initialHigh) {
+              let low = initialLow
+              let high = initialHigh
+              while (high - low > BINARY_THRESHOLD) {
+                const mid = Math.floor((low + high) / 2)
+                try {
+                  if (await ownedAbove(mid)) low = mid + BATCH
+                  else high = mid
+                } catch {
+                  high = mid  // treat failure as empty
+                }
+              }
+              return { low, high }
+            }
+
+            // Phase 4 - fetch the narrow window in one batched call and walk for the exact max.
+            async function exactScan(low, high) {
+              const scanIds = Array.from({ length: high - low + BATCH }, (_, i) => low + i)
+              try {
+                const results = await batchOwnerOfRpc(rpcUrl, contract, scanIds, blockTag)
+                let max = knownEnd
+                for (let i = 0; i < results.length; i++) {
+                  if (hasOwner(results[i])) max = scanIds[i]
+                }
+                return max > knownEnd ? max : null
+              } catch {
+                return low > knownEnd ? low : null
+              }
+            }
+
+            async function ownedAbove(start) {
+              const ids = Array.from({ length: BATCH }, (_, i) => start + i)
+              const results = await batchOwnerOfRpc(rpcUrl, contract, ids, blockTag)
+              return results.some(r => hasOwner(r))
+            }
+          }
+        }
+
+        // ----------------------------------------------------
+        // -- Scanning
+        // ----------------------------------------------------
+        const scanTokenIds = async (chain, contract, tokenIds, blockTag, callbacks) => {
+          const chainConfig = CHAIN_CONFIG[chain]
+          const concurrency = chainConfig.concurrency || 10
+          const batchSize = chainConfig.batchSize || 20
+          const scanDelayMs = chainConfig.scanDelayMs || 0
+          const total = tokenIds.length
+          let done = 0
+          let idx = 0
+
+          const worker = async () => {
+            while (idx < tokenIds.length && !callbacks.shouldStop()) {
+              const batch = tokenIds.slice(idx, idx + batchSize)
+              idx += batch.length
+
+              const results = await fetchOwnersInBatches(chain, contract, batch, blockTag, callbacks)
+              if (results) callbacks.onBatchResults(batch, results)
+              else callbacks.onBatchFailed(batch)
+
+              done += batch.length
+              callbacks.onProgress(done, total)
+
+              if (shouldThrottle()) await sleep(scanDelayMs)
+            }
+          }
+
+          await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+
+          // support
+          async function fetchOwnersInBatches(chain, contract, batch, blockTag, callbacks) {
+            for (let attempt = 0; attempt < 5; attempt++) {
+              try {
+                return await batchOwnerOfRpc(callbacks.getActiveRpc(chain), contract, batch, blockTag)
+              } catch (e) {
+                callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt + 1}/4 (${String(e.message || '').slice(0, 45)})`)
+                await sleep(RETRY_DELAYS_MS[attempt])
+
+                if (attempt === 4) {
+                  if (callbacks.isUsingFallback()) return false
+                  if (CHAIN_CONFIG[chain].alchemyFallback === false) return false
+                  callbacks.setUsingFallback(true)
+                  callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
+                  attempt = -1  // reset so fallback gets a full set of retries
+                }
+              }
+            }
+            return null
+          }
+
+          // Throttle between batches to respect the chain's rate limit.
+          function shouldThrottle() {
+            return scanDelayMs > 0 &&
+              idx < tokenIds.length &&
+              !callbacks.shouldStop()
+          }
+        }
+
 
         // ----------------------------------------------------
         // -- RPC
@@ -996,7 +1196,7 @@
           return CHAIN_CONFIG[chain].publicRpc || alchemyRpc(chain)
         }
 
-        const batchOwnerOf = async (rpc, contract, tokenIds, blockTag = 'latest') => {
+        const batchOwnerOfRpc = async (rpc, contract, tokenIds, blockTag = 'latest') => {
           const response = await fetch(rpc, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1033,233 +1233,24 @@
           }
         }
 
-        const rpcCall = async (rpc, method, params, timeout = 15000) => {
-          const response = await fetch(rpc, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
-            signal: AbortSignal.timeout(timeout),
-          })
-          const { result, error } = await response.json()
-          if (error) throw new Error(error.message || JSON.stringify(error))
-          return result
-        }
+        const fetchTotalSupplyRpc = async (rpcUrl, contract, blockTag) => {
+          try {
+            const response = await fetch(rpcUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'eth_call', params: [{ to: contract, data: TOTAL_SUPPLY_SIG }, blockTag] }),
+              signal: AbortSignal.timeout(10000),
+            })
+            const { result, error } = await response.json()
+            if (error) throw new Error(error.message || JSON.stringify(error))
+            if (!result || result === '0x') return null
 
-
-        // ----------------------------------------------------
-        // -- Token Range Detection
-        // ----------------------------------------------------
-        const detectTokenRange = async (rpcUrl, contract, blockTag = 'latest') => {
-          // Detects the token ID range for an ERC-721 contract.
-          // Returns { supply, startId } where:
-          //   startId - 0 or 1 depending on where the collection starts; null if undetectable.
-          //   supply  - exclusive upper bound of the ID range. Null if totalSupply() is unavailable.
-          const supply = await fetchTotalSupply()
-          const startId = await detectStartId()
-          if (supply === null) return { supply: null, startId }
-
-          // totalSupply() is an unburned-token count, not a max ID. Adjust to get the estimated
-          // last token ID, then probe above it in case burns created gaps that pushed the real
-          // ceiling higher.
-          const estimatedEnd = startId === 0 ? supply - 1 : supply
-          const actualMax = await findMaxTokenId(rpcUrl, contract, estimatedEnd, blockTag)
-          if (actualMax === null) return { supply, startId }
-          const resolvedSupply = startId === 0 ? actualMax + 1 : actualMax
-
-          return { supply: resolvedSupply, startId }
-
-
-          // Support
-          async function fetchTotalSupply() {
-            try {
-              const result = await rpcCall(rpcUrl, 'eth_call', [{ to: contract, data: TOTAL_SUPPLY_SIG }, blockTag], 10000)
-              if (!result || result === '0x') return null
-              const parsed = parseInt(result, 16)
-              return parsed > 0 && parsed < 10_000_000 ? parsed : null
-            } catch {
-              return null  // contract doesn't implement totalSupply(), or RPC failed
-            }
-          }
-
-          async function detectStartId() {
-            try {
-              const result = await batchOwnerOf(rpcUrl, contract, [0], blockTag)
-              if (hasOwner(result[0])) return 0
-            } catch { /* RPC failed, fall through to probe token ID 1 */ }
-
-            try {
-              const result = await batchOwnerOf(rpcUrl, contract, [1], blockTag)
-              if (hasOwner(result[0])) return 1
-            } catch { /* RPC failed, startId remains unknown */ }
-
-            return null
+            const parsed = parseInt(result, 16)
+            return parsed > 0 && parsed < 10_000_000 ? parsed : null
+          } catch {
+            return null  // contract doesn't implement totalSupply(), or RPC failed
           }
         }
-
-        const findMaxTokenId = async (rpcUrl, contract, knownEnd, blockTag = 'latest') => {
-          // Finds the highest owned token ID above knownEnd (burns make totalSupply() unreliable).
-          // Returns null if nothing exists above knownEnd.
-          //
-          // We can't probe one ID at a time - ownerOf() is an individual RPC call and would be
-          // too slow for large collections. Instead, batchOwnerOf checks BATCH IDs per call,
-          // answering "does any token in this window have an owner?" to locate the boundary cheaply.
-          //
-          // Phase 1 - quick check (1 RPC call):
-          //   Probe the window [knownEnd+1 .. knownEnd+BATCH]. If it is empty, nothing exists
-          //   above knownEnd and we return null immediately without further calls.
-          //
-          // Phase 2 - exponential jump (1 RPC call per iteration):
-          //   Start high at knownEnd+200 and probe that window. If it has owners, advance low
-          //   to high (recording the last known-occupied position) and double the distance from
-          //   knownEnd so we leap further ahead each time. Repeat until a window is empty
-          //   (high is now a confirmed empty upper bound) or MAX_JUMP is reached.
-          //   Invariant after this phase: low has owners, high is empty.
-          //
-          // Phase 3 - binary search (1 RPC call per iteration):
-          //   [low, high] may still span thousands of IDs. Each call probes the midpoint window.
-          //   If the midpoint has owners the boundary is above it, so low advances to mid+BATCH.
-          //   If empty, the boundary is below it, so high retreats to mid.
-          //   Repeat until the gap is ≤ BINARY_THRESHOLD, small enough to scan directly.
-          //
-          // Phase 4 - linear scan (1 RPC call):
-          //   Fetch every ID in the small remaining window in one batched call. Walk the results
-          //   and track the highest ID with an owner - that is the exact answer.
-
-          const BATCH = 20
-          const BINARY_THRESHOLD = BATCH * 3
-          const MAX_JUMP = 100_000
-
-          if (!await quickCheck()) return null
-          const { low, high } = await findBracket()
-          const narrow = await narrowRange(low, high)
-          return exactScan(narrow.low, narrow.high)
-
-
-          // Support
-          // Phase 1 - probe the window immediately above knownEnd; bail early if empty.
-          async function quickCheck() {
-            try {
-              return await ownedAbove(knownEnd + 1)
-            } catch {
-              return false
-            }
-          }
-
-          // Phase 2 - doubles the probe distance until it hits an empty window or MAX_JUMP.
-          async function findBracket() {
-            let low = knownEnd
-            let high = knownEnd + 200
-            while (high - knownEnd <= MAX_JUMP) {
-              try {
-                if (!await ownedAbove(high)) break
-                low = high
-                high += (high - knownEnd)
-              } catch {
-                break  // treat failure as empty
-              }
-            }
-            return { low, high }
-          }
-
-          // Phase 3 - binary search to narrow [low, high] to within BINARY_THRESHOLD.
-          async function narrowRange(initialLow, initialHigh) {
-            let low = initialLow
-            let high = initialHigh
-            while (high - low > BINARY_THRESHOLD) {
-              const mid = Math.floor((low + high) / 2)
-              try {
-                if (await ownedAbove(mid)) low = mid + BATCH
-                else high = mid
-              } catch {
-                high = mid  // treat failure as empty
-              }
-            }
-            return { low, high }
-          }
-
-          // Phase 4 - fetch the narrow window in one batched call and walk for the exact max.
-          async function exactScan(low, high) {
-            const scanIds = Array.from({ length: high - low + BATCH }, (_, i) => low + i)
-            try {
-              const results = await batchOwnerOf(rpcUrl, contract, scanIds, blockTag)
-              let max = knownEnd
-              for (let i = 0; i < results.length; i++) {
-                if (hasOwner(results[i])) max = scanIds[i]
-              }
-              return max > knownEnd ? max : null
-            } catch {
-              return low > knownEnd ? low : null
-            }
-          }
-
-          async function ownedAbove(start) {
-            const ids = Array.from({ length: BATCH }, (_, i) => start + i)
-            const results = await batchOwnerOf(rpcUrl, contract, ids, blockTag)
-            return results.some(r => hasOwner(r))
-          }
-        }
-
-
-        // ----------------------------------------------------
-        // -- Scanning
-        // ----------------------------------------------------
-        const scanTokenIds = async (chain, contract, tokenIds, blockTag, callbacks) => {
-          const chainConfig = CHAIN_CONFIG[chain]
-          const concurrency = chainConfig.concurrency || 10
-          const batchSize = chainConfig.batchSize || 20
-          const scanDelayMs = chainConfig.scanDelayMs || 0
-          const total = tokenIds.length
-          let done = 0
-          let idx = 0
-
-          const worker = async () => {
-            while (idx < tokenIds.length && !callbacks.shouldStop()) {
-              const batch = tokenIds.slice(idx, idx + batchSize)
-              idx += batch.length
-
-              const results = await fetchBatch(chain, contract, batch, blockTag, callbacks)
-              if (results) callbacks.onBatchResults(batch, results)
-              else callbacks.onBatchFailed(batch)
-
-              done += batch.length
-              callbacks.onProgress(done, total)
-
-              if (shouldThrottle()) await sleep(scanDelayMs)
-            }
-          }
-
-          await Promise.all(Array.from({ length: concurrency }, () => worker()))
-
-
-          // support
-          // Throttle between batches to respect the chain's rate limit.
-          function shouldThrottle() {
-            return scanDelayMs > 0 &&
-              idx < tokenIds.length &&
-              !callbacks.shouldStop() &&
-              !callbacks.isUsingFallback()
-          }
-        }
-
-        const fetchBatch = async (chain, contract, batch, blockTag, callbacks) => {
-          for (let attempt = 0; attempt < 5; attempt++) {
-            try {
-              return await batchOwnerOf(callbacks.getActiveRpc(chain), contract, batch, blockTag)
-            } catch (e) {
-              callbacks.log('warning', `Batch ${batch[0]}-${batch[batch.length - 1]}: retry ${attempt + 1}/4 (${String(e.message || '').slice(0, 45)})`)
-              await sleep(RETRY_DELAYS_MS[attempt])
-
-              if (attempt === 3) {
-                if (callbacks.isUsingFallback()) return false
-                if (CHAIN_CONFIG[chain].alchemyFallback === false) return false
-                callbacks.setUsingFallback(true)
-                callbacks.log('warning', 'Public RPC failed, switching to Alchemy fallback...')
-              }
-            }
-          }
-          return null
-        }
-
 
         // ----------------------------------------------------
         // -- Support
